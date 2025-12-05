@@ -33,17 +33,11 @@ endif()
 # Source files
 set(PLUGIN_SOURCES
     src/IntensityProfilePlotterPlugin.cpp
-    src/IntensityProfilePlotterPlugin.h
     src/IntensityProfilePlotterInteract.cpp
-    src/IntensityProfilePlotterInteract.h
     src/IntensitySampler.cpp
-    src/IntensitySampler.h
     src/ProfilePlotter.cpp
-    src/ProfilePlotter.h
     src/GPURenderer.cpp
-    src/GPURenderer.h
     src/CPURenderer.cpp
-    src/CPURenderer.h
 )
 
 # GPU kernel sources
