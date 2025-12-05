@@ -8,6 +8,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # OFX SDK path - adjust as needed
 set(OFX_SDK_PATH "${CMAKE_CURRENT_SOURCE_DIR}/ofx-sdk" CACHE PATH "Path to OpenFX SDK")
 
+# Verify OFX SDK path exists
+if(NOT EXISTS "${OFX_SDK_PATH}")
+    message(FATAL_ERROR "OFX SDK path does not exist: ${OFX_SDK_PATH}")
+endif()
+
+if(NOT EXISTS "${OFX_SDK_PATH}/include")
+    message(FATAL_ERROR "OFX SDK include directory not found at: ${OFX_SDK_PATH}/include")
+endif()
+
 # Platform detection
 if(APPLE)
     set(PLATFORM_MACOS ON)
@@ -57,19 +66,26 @@ include_directories(
 
 # Metal-specific setup (macOS)
 if(PLATFORM_MACOS)
-    # Compile Metal shaders
-    add_custom_command(
-        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib
-        COMMAND xcrun -sdk macosx metal -c ${CMAKE_CURRENT_SOURCE_DIR}/kernels/intensitySampler.metal -o ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.air
-        COMMAND xcrun -sdk macosx metallib ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.air -o ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/kernels/intensitySampler.metal
-        COMMENT "Compiling Metal shaders"
-    )
-    
-    # Embed Metal library
-    set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib PROPERTIES
-        MACOSX_PACKAGE_LOCATION "Resources"
-    )
+    # Check if xcrun is available
+    find_program(XCRUN_EXECUTABLE xcrun)
+    if(XCRUN_EXECUTABLE)
+        # Compile Metal shaders
+        add_custom_command(
+            OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib
+            COMMAND ${XCRUN_EXECUTABLE} -sdk macosx metal -c ${CMAKE_CURRENT_SOURCE_DIR}/kernels/intensitySampler.metal -o ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.air
+            COMMAND ${XCRUN_EXECUTABLE} -sdk macosx metallib ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.air -o ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/kernels/intensitySampler.metal
+            COMMENT "Compiling Metal shaders"
+            VERBATIM
+        )
+        
+        # Embed Metal library
+        set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib PROPERTIES
+            MACOSX_PACKAGE_LOCATION "Resources"
+        )
+    else()
+        message(WARNING "xcrun not found - Metal shader compilation will be skipped")
+    endif()
 endif()
 
 # OpenCL kernel embedding
@@ -90,7 +106,8 @@ if(PLATFORM_MACOS)
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/Info.plist
     )
     
-    if(EXISTS ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib)
+    # Add Metal library if it will be generated
+    if(XCRUN_EXECUTABLE)
         target_sources(IntensityProfilePlotter PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib)
     endif()
     
@@ -137,6 +154,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         -Wextra
         -Wno-unused-parameter
         -fPIC
+    )
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    target_compile_options(IntensityProfilePlotter PRIVATE
+        /W4
+        /wd4100  # Unused parameter warning
     )
 endif()
 
