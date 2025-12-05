@@ -62,17 +62,25 @@ jobs:
         OFX_SDK_DIR="${{ github.workspace }}/plugin/ofx-sdk"
         mkdir -p "$OFX_SDK_DIR"
         
+        # Use platform-agnostic temp directory
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          TEMP_DIR="$TEMP/openfx-sdk-$$"
+        else
+          TEMP_DIR="/tmp/openfx-sdk-$$"
+        fi
+        mkdir -p "$TEMP_DIR"
+        
         # Try multiple methods to get the OpenFX SDK
         echo "Attempting to download OpenFX SDK..."
         
         # Method 1: Clone from GitHub (ofxa/openfx repository)
-        if git clone --depth 1 https://github.com/ofxa/openfx.git /tmp/openfx 2>/dev/null; then
-          cd /tmp/openfx
+        if git clone --depth 1 https://github.com/ofxa/openfx.git "$TEMP_DIR/openfx" 2>/dev/null; then
+          cd "$TEMP_DIR/openfx"
           # Try to checkout the 1.4 tag if it exists
           git checkout OFX_1_4 2>/dev/null || git checkout tags/OFX_1_4 2>/dev/null || git checkout tags/v1.4 2>/dev/null || true
         # Method 2: Try alternative repository location
-        elif git clone --depth 1 https://github.com/NatronGitHub/openfx.git /tmp/openfx 2>/dev/null; then
-          cd /tmp/openfx
+        elif git clone --depth 1 https://github.com/NatronGitHub/openfx.git "$TEMP_DIR/openfx" 2>/dev/null; then
+          cd "$TEMP_DIR/openfx"
           git checkout OFX_1_4 2>/dev/null || git checkout tags/OFX_1_4 2>/dev/null || true
         else
           echo "Error: Failed to clone OpenFX repository"
@@ -80,24 +88,24 @@ jobs:
         fi
         
         # Check for include directory in various possible locations
-        if [ -d /tmp/openfx/include ]; then
-          cp -r /tmp/openfx/include "$OFX_SDK_DIR/"
-        elif [ -d /tmp/openfx/Include ]; then
-          cp -r /tmp/openfx/Include "$OFX_SDK_DIR/include"
-        elif [ -d /tmp/openfx/include/ofx ]; then
+        if [ -d "$TEMP_DIR/openfx/include" ]; then
+          cp -r "$TEMP_DIR/openfx/include" "$OFX_SDK_DIR/"
+        elif [ -d "$TEMP_DIR/openfx/Include" ]; then
+          cp -r "$TEMP_DIR/openfx/Include" "$OFX_SDK_DIR/include"
+        elif [ -d "$TEMP_DIR/openfx/include/ofx" ]; then
           mkdir -p "$OFX_SDK_DIR/include"
-          cp -r /tmp/openfx/include/ofx "$OFX_SDK_DIR/include/"
+          cp -r "$TEMP_DIR/openfx/include/ofx" "$OFX_SDK_DIR/include/"
         else
           echo "Error: OpenFX SDK include directory not found"
           echo "Repository structure:"
-          ls -la /tmp/openfx/ | head -20
-          find /tmp/openfx -name "*.h" -type f | head -10
+          ls -la "$TEMP_DIR/openfx/" | head -20
+          find "$TEMP_DIR/openfx" -name "*.h" -type f | head -10
           exit 1
         fi
         
         # Copy lib directory if it exists (optional)
-        [ -d /tmp/openfx/lib ] && cp -r /tmp/openfx/lib "$OFX_SDK_DIR/" || true
-        [ -d /tmp/openfx/Lib ] && cp -r /tmp/openfx/Lib "$OFX_SDK_DIR/lib" || true
+        [ -d "$TEMP_DIR/openfx/lib" ] && cp -r "$TEMP_DIR/openfx/lib" "$OFX_SDK_DIR/" || true
+        [ -d "$TEMP_DIR/openfx/Lib" ] && cp -r "$TEMP_DIR/openfx/Lib" "$OFX_SDK_DIR/lib" || true
         
         echo "OpenFX SDK downloaded successfully to $OFX_SDK_DIR"
         echo "SDK structure:"
@@ -119,21 +127,48 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: >
-        cmake -B ${{ steps.strings.outputs.build-output-dir }}
-        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DOFX_SDK_PATH=${{ steps.strings.outputs.ofx-sdk-dir }}
-        -S ${{ steps.strings.outputs.plugin-dir }}
+      shell: bash
+      run: |
+        BUILD_DIR="${{ steps.strings.outputs.build-output-dir }}"
+        PLUGIN_DIR="${{ steps.strings.outputs.plugin-dir }}"
+        OFX_SDK_DIR="${{ steps.strings.outputs.ofx-sdk-dir }}"
+        
+        # Windows uses multi-config generators, so CMAKE_BUILD_TYPE is not used
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          cmake -B "$BUILD_DIR" \
+            -DCMAKE_CXX_COMPILER="${{ matrix.cpp_compiler }}" \
+            -DCMAKE_C_COMPILER="${{ matrix.c_compiler }}" \
+            -DOFX_SDK_PATH="$OFX_SDK_DIR" \
+            -S "$PLUGIN_DIR"
+        else
+          cmake -B "$BUILD_DIR" \
+            -DCMAKE_CXX_COMPILER="${{ matrix.cpp_compiler }}" \
+            -DCMAKE_C_COMPILER="${{ matrix.c_compiler }}" \
+            -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
+            -DOFX_SDK_PATH="$OFX_SDK_DIR" \
+            -S "$PLUGIN_DIR"
+        fi
 
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+      shell: bash
+      run: |
+        BUILD_DIR="${{ steps.strings.outputs.build-output-dir }}"
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          cmake --build "$BUILD_DIR" --config "${{ matrix.build_type }}"
+        else
+          cmake --build "$BUILD_DIR"
+        fi
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+      shell: bash
       continue-on-error: true
-      run: ctest --build-config ${{ matrix.build_type }} || echo "No tests configured or tests failed"
+      run: |
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          ctest --build-config "${{ matrix.build_type }}" || echo "No tests configured or tests failed"
+        else
+          ctest || echo "No tests configured or tests failed"
+        fi
