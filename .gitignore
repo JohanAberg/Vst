@@ -1,41 +1,54 @@
-# Prerequisites
-*.d
+# Build directories
+build/
+build-*/
+*.build/
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.cmake
+!CMakeLists.txt
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
+# Compiled binaries
+*.ofx
 *.dylib
+*.so
 *.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
+*.exe
 *.a
 *.lib
 
-# Executables
-*.exe
-*.out
-*.app
+# Object files
+*.o
+*.obj
+*.lo
 
-# debug information files
-*.dwo
+# Metal compiled outputs
+*.air
+*.metallib
+
+# IDE files
+.vscode/
+.idea/
+*.xcodeproj/
+*.xcworkspace/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.suo
+*.user
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Dependencies
+ofx-sdk/
+third_party/
+
+# Logs
+*.log
