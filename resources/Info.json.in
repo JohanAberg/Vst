@@ -1,0 +1,7 @@
+{
+  "name": "AnalogCircuitSaturation",
+  "version": "@AnalogCircuitSaturation_VERSION@",
+  "vendor": "Analog Saturation Lab",
+  "homepage": "https://analog-saturation.example.com",
+  "category": "Fx|Distortion"
+}

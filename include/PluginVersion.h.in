@@ -1,0 +1,6 @@
+#pragma once
+
+#define ANALOG_SATURATION_VERSION_STR "@PROJECT_VERSION@"
+#define ANALOG_SATURATION_VENDOR "Analog Saturation Lab"
+#define ANALOG_SATURATION_URL "https://analog-saturation.example.com"
+#define ANALOG_SATURATION_EMAIL "support@analog-saturation.example.com"
