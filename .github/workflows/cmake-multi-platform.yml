@@ -59,12 +59,14 @@ jobs:
       # Download OpenFX SDK from GitHub
       shell: bash
       run: |
+        set -e
         OFX_SDK_DIR="${{ github.workspace }}/plugin/ofx-sdk"
         mkdir -p "$OFX_SDK_DIR"
         
         # Use platform-agnostic temp directory
         if [ "$RUNNER_OS" == "Windows" ]; then
-          TEMP_DIR="$TEMP/openfx-sdk-$$"
+          # On Windows, use a path that works with both bash and native tools
+          TEMP_DIR="${TEMP:-/tmp}/openfx-sdk-$$"
         else
           TEMP_DIR="/tmp/openfx-sdk-$$"
         fi
@@ -74,14 +76,16 @@ jobs:
         echo "Attempting to download OpenFX SDK..."
         
         # Method 1: Clone from GitHub (ofxa/openfx repository)
-        if git clone --depth 1 https://github.com/ofxa/openfx.git "$TEMP_DIR/openfx" 2>/dev/null; then
+        if git clone --depth 1 --branch master https://github.com/ofxa/openfx.git "$TEMP_DIR/openfx" 2>&1; then
           cd "$TEMP_DIR/openfx"
           # Try to checkout the 1.4 tag if it exists
-          git checkout OFX_1_4 2>/dev/null || git checkout tags/OFX_1_4 2>/dev/null || git checkout tags/v1.4 2>/dev/null || true
+          git fetch --depth 1 origin tag OFX_1_4 2>/dev/null || git fetch --depth 1 origin tag v1.4 2>/dev/null || true
+          git checkout OFX_1_4 2>/dev/null || git checkout tags/OFX_1_4 2>/dev/null || git checkout tags/v1.4 2>/dev/null || echo "Using master branch"
         # Method 2: Try alternative repository location
-        elif git clone --depth 1 https://github.com/NatronGitHub/openfx.git "$TEMP_DIR/openfx" 2>/dev/null; then
+        elif git clone --depth 1 --branch master https://github.com/NatronGitHub/openfx.git "$TEMP_DIR/openfx" 2>&1; then
           cd "$TEMP_DIR/openfx"
-          git checkout OFX_1_4 2>/dev/null || git checkout tags/OFX_1_4 2>/dev/null || true
+          git fetch --depth 1 origin tag OFX_1_4 2>/dev/null || true
+          git checkout OFX_1_4 2>/dev/null || git checkout tags/OFX_1_4 2>/dev/null || echo "Using master branch"
         else
           echo "Error: Failed to clone OpenFX repository"
           exit 1
@@ -99,7 +103,7 @@ jobs:
           echo "Error: OpenFX SDK include directory not found"
           echo "Repository structure:"
           ls -la "$TEMP_DIR/openfx/" | head -20
-          find "$TEMP_DIR/openfx" -name "*.h" -type f | head -10
+          find "$TEMP_DIR/openfx" -name "*.h" -type f 2>/dev/null | head -10 || echo "No header files found"
           exit 1
         fi
         
@@ -112,7 +116,7 @@ jobs:
         ls -la "$OFX_SDK_DIR/"
         if [ -d "$OFX_SDK_DIR/include" ]; then
           echo "Include files:"
-          find "$OFX_SDK_DIR/include" -name "*.h" | head -10
+          find "$OFX_SDK_DIR/include" -name "*.h" 2>/dev/null | head -10 || echo "No header files found in include directory"
         fi
 
     - name: Set reusable strings
@@ -129,15 +133,22 @@ jobs:
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
       shell: bash
       run: |
+        set -e
         BUILD_DIR="${{ steps.strings.outputs.build-output-dir }}"
         PLUGIN_DIR="${{ steps.strings.outputs.plugin-dir }}"
         OFX_SDK_DIR="${{ steps.strings.outputs.ofx-sdk-dir }}"
         
+        # Verify OFX SDK directory exists
+        if [ ! -d "$OFX_SDK_DIR/include" ]; then
+          echo "Error: OFX SDK include directory not found at $OFX_SDK_DIR/include"
+          exit 1
+        fi
+        
         # Windows uses multi-config generators, so CMAKE_BUILD_TYPE is not used
         if [ "$RUNNER_OS" == "Windows" ]; then
+          # On Windows, use the default generator (Visual Studio) and don't specify compiler
+          # The Visual Studio generator will use the appropriate compiler automatically
           cmake -B "$BUILD_DIR" \
-            -DCMAKE_CXX_COMPILER="${{ matrix.cpp_compiler }}" \
-            -DCMAKE_C_COMPILER="${{ matrix.c_compiler }}" \
             -DOFX_SDK_PATH="$OFX_SDK_DIR" \
             -S "$PLUGIN_DIR"
         else
@@ -153,11 +164,12 @@ jobs:
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
       shell: bash
       run: |
+        set -e
         BUILD_DIR="${{ steps.strings.outputs.build-output-dir }}"
         if [ "$RUNNER_OS" == "Windows" ]; then
-          cmake --build "$BUILD_DIR" --config "${{ matrix.build_type }}"
+          cmake --build "$BUILD_DIR" --config "${{ matrix.build_type }}" --verbose
         else
-          cmake --build "$BUILD_DIR"
+          cmake --build "$BUILD_DIR" --verbose
         fi
 
     - name: Test
