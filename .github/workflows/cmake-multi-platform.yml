@@ -55,6 +55,49 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Download OpenFX SDK
+      # Download OpenFX SDK from GitHub releases
+      shell: bash
+      run: |
+        OFX_VERSION="1.4"
+        OFX_SDK_DIR="${{ github.workspace }}/plugin/ofx-sdk"
+        mkdir -p "$OFX_SDK_DIR"
+        
+        if [[ "${{ runner.os }}" == "Linux" ]]; then
+          # Download from OpenFX GitHub releases (adjust URL as needed)
+          curl -L -o /tmp/ofx-sdk.tar.gz "https://github.com/ofxa/openfx/archive/refs/tags/OFX_1_4.tar.gz" || \
+          curl -L -o /tmp/ofx-sdk.tar.gz "https://github.com/ofxa/openfx/releases/download/OFX_1_4/ofx-sdk-1.4.tar.gz" || \
+          curl -L -o /tmp/ofx-sdk.zip "https://github.com/ofxa/openfx/archive/refs/tags/OFX_1_4.zip"
+          
+          if [ -f /tmp/ofx-sdk.tar.gz ]; then
+            tar -xzf /tmp/ofx-sdk.tar.gz -C "$OFX_SDK_DIR" --strip-components=1
+          elif [ -f /tmp/ofx-sdk.zip ]; then
+            unzip -q /tmp/ofx-sdk.zip -d /tmp
+            mv /tmp/openfx-OFX_1_4/* "$OFX_SDK_DIR/" || mv /tmp/ofx-OFX_1_4/* "$OFX_SDK_DIR/"
+          fi
+        elif [[ "${{ runner.os }}" == "macOS" ]]; then
+          curl -L -o /tmp/ofx-sdk.tar.gz "https://github.com/ofxa/openfx/archive/refs/tags/OFX_1_4.tar.gz" || \
+          curl -L -o /tmp/ofx-sdk.tar.gz "https://github.com/ofxa/openfx/releases/download/OFX_1_4/ofx-sdk-1.4.tar.gz" || \
+          curl -L -o /tmp/ofx-sdk.zip "https://github.com/ofxa/openfx/archive/refs/tags/OFX_1_4.zip"
+          
+          if [ -f /tmp/ofx-sdk.tar.gz ]; then
+            tar -xzf /tmp/ofx-sdk.tar.gz -C "$OFX_SDK_DIR" --strip-components=1
+          elif [ -f /tmp/ofx-sdk.zip ]; then
+            unzip -q /tmp/ofx-sdk.zip -d /tmp
+            mv /tmp/openfx-OFX_1_4/* "$OFX_SDK_DIR/" || mv /tmp/ofx-OFX_1_4/* "$OFX_SDK_DIR/"
+          fi
+        else
+          # Windows
+          curl -L -o /tmp/ofx-sdk.zip "https://github.com/ofxa/openfx/archive/refs/tags/OFX_1_4.zip"
+          if [ -f /tmp/ofx-sdk.zip ]; then
+            unzip -q /tmp/ofx-sdk.zip -d /tmp
+            if [ -d /tmp/openfx-OFX_1_4 ]; then
+              xcopy /E /I /Y /Q "C:\tmp\openfx-OFX_1_4\*" "${{ github.workspace }}\plugin\ofx-sdk\" || \
+              powershell -Command "Expand-Archive -Path C:\tmp\ofx-sdk.zip -DestinationPath C:\tmp -Force; Copy-Item -Path C:\tmp\openfx-OFX_1_4\* -Destination ${{ github.workspace }}\plugin\ofx-sdk\ -Recurse -Force"
+            fi
+          fi
+        fi
+
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
       id: strings
