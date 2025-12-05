@@ -1,16 +1,21 @@
-# Analog Saturation VST3 Plugin
+# Analog Saturation Plugin
 
-A cross-platform VST3 plugin that models analog circuits for saturation using state-of-the-art algorithms including Wave Digital Filters (WDF) and nonlinear state-space models.
+A cross-platform audio plugin that models analog circuits for saturation using state-of-the-art algorithms including Wave Digital Filters (WDF) and nonlinear state-space models.
+
+**This repository contains implementations for both VST3 and OFX (OpenFX) plugin formats**, allowing the same advanced saturation algorithms to be used in both audio DAWs (VST3) and video/compositing software (OFX).
 
 ## Features
 
+- **Dual Plugin Format Support**: 
+  - **VST3**: For audio DAWs (Ableton Live, Pro Tools, Reaper, etc.)
+  - **OFX (OpenFX)**: For video/compositing software (DaVinci Resolve, Nuke, Fusion, etc.)
 - **Advanced Circuit Modeling**: Uses Wave Digital Filters (WDF) for accurate analog circuit simulation
 - **Nonlinear State-Space Models**: Implements sophisticated saturation algorithms based on real analog circuits
 - **Multiple Saturation Types**: Various circuit models including tube, transistor, and diode-based saturation
 - **Hybrid Modeling**: Combines WDF and state-space approaches for rich, complex saturation
 - **Cross-Platform**: Builds on Windows, macOS, and Linux
 - **Low Latency**: Optimized DSP algorithms for real-time processing
-- **Full Automation**: All parameters support DAW automation
+- **Full Automation**: All parameters support automation in both formats
 
 ## Quick Start
 
@@ -20,7 +25,9 @@ A cross-platform VST3 plugin that models analog circuits for saturation using st
 ./setup_juce.sh
 ```
 
-### 2. Build the Plugin
+### 2. Build the Plugins
+
+The build system will compile both VST3 and OFX versions:
 
 ```bash
 mkdir build && cd build
@@ -28,7 +35,11 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . --config Release
 ```
 
-See [BUILD.md](BUILD.md) for detailed build instructions.
+**Output locations:**
+- **VST3**: `build/AnalogSaturation_artefacts/Release/VST3/`
+- **OFX**: `build/AnalogSaturation_artefacts/Release/OFX/`
+
+See [BUILD.md](BUILD.md) for detailed build instructions for each format.
 
 ## Algorithm Details
 
@@ -59,19 +70,31 @@ See [ALGORITHMS.md](ALGORITHMS.md) for detailed algorithm documentation.
 
 ## Project Structure
 
+This repository is organized to support both VST3 and OFX plugin formats:
+
 ```
 .
-├── CMakeLists.txt          # Main CMake configuration
+├── CMakeLists.txt          # Main CMake configuration (builds both VST3 and OFX)
 ├── Source/
-│   ├── PluginProcessor.*   # Main plugin processor
-│   ├── PluginEditor.*      # Plugin UI
-│   ├── SaturationEngine.* # DSP engine wrapper
-│   ├── CircuitModels.*     # Circuit modeling interface
-│   ├── WaveDigitalFilter.*# WDF implementation
-│   └── NonlinearStateSpace.* # State-space models
+│   ├── PluginProcessor.*   # VST3 plugin processor
+│   ├── PluginEditor.*      # VST3 plugin UI
+│   ├── OFX/                 # OFX plugin implementation (OpenFX format)
+│   ├── SaturationEngine.* # Shared DSP engine wrapper
+│   ├── CircuitModels.*     # Shared circuit modeling interface
+│   ├── WaveDigitalFilter.*# Shared WDF implementation
+│   └── NonlinearStateSpace.* # Shared state-space models
 ├── BUILD.md                # Detailed build instructions
 └── ALGORITHMS.md           # Algorithm documentation
 ```
+
+### Shared DSP Code
+
+The core saturation algorithms (`SaturationEngine`, `CircuitModels`, `WaveDigitalFilter`, `NonlinearStateSpace`) are shared between both plugin formats, ensuring consistent audio processing regardless of the host application.
+
+### Plugin Format Details
+
+- **VST3**: Audio plugin format for music production DAWs
+- **OFX**: OpenFX plugin format for video post-production and compositing software
 
 ## Requirements
 
