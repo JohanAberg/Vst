@@ -75,30 +75,39 @@ jobs:
         # Try multiple methods to get the OpenFX SDK
         echo "Attempting to download OpenFX SDK..."
         
-        # Method 1: Clone from GitHub (ofxa/openfx repository)
-        if git clone --depth 1 --branch master https://github.com/ofxa/openfx.git "$TEMP_DIR/openfx" 2>&1; then
+        # Method 1: Clone from GitHub (ofxa/openfx repository) - use default branch
+        if git clone --depth 1 https://github.com/ofxa/openfx.git "$TEMP_DIR/openfx" 2>&1; then
+          echo "Successfully cloned from ofxa/openfx"
           cd "$TEMP_DIR/openfx"
-          # Try to checkout the 1.4 tag if it exists
-          git fetch --depth 1 origin tag OFX_1_4 2>/dev/null || git fetch --depth 1 origin tag v1.4 2>/dev/null || true
-          git checkout OFX_1_4 2>/dev/null || git checkout tags/OFX_1_4 2>/dev/null || git checkout tags/v1.4 2>/dev/null || echo "Using master branch"
+          # Try to checkout the 1.4 tag if it exists (optional, will use default if not found)
+          if git fetch --depth 1 origin tag OFX_1_4 2>/dev/null && git checkout OFX_1_4 2>/dev/null; then
+            echo "Checked out OFX_1_4 tag"
+          elif git fetch --depth 1 origin tag v1.4 2>/dev/null && git checkout tags/v1.4 2>/dev/null; then
+            echo "Checked out v1.4 tag"
+          else
+            echo "Using default branch (tag not found or already on default)"
+          fi
         # Method 2: Try alternative repository location
-        elif git clone --depth 1 --branch master https://github.com/NatronGitHub/openfx.git "$TEMP_DIR/openfx" 2>&1; then
+        elif git clone --depth 1 https://github.com/NatronGitHub/openfx.git "$TEMP_DIR/openfx" 2>&1; then
+          echo "Successfully cloned from NatronGitHub/openfx"
           cd "$TEMP_DIR/openfx"
-          git fetch --depth 1 origin tag OFX_1_4 2>/dev/null || true
-          git checkout OFX_1_4 2>/dev/null || git checkout tags/OFX_1_4 2>/dev/null || echo "Using master branch"
+          if git fetch --depth 1 origin tag OFX_1_4 2>/dev/null && git checkout OFX_1_4 2>/dev/null; then
+            echo "Checked out OFX_1_4 tag"
+          else
+            echo "Using default branch (tag not found or already on default)"
+          fi
         else
-          echo "Error: Failed to clone OpenFX repository"
+          echo "Error: Failed to clone OpenFX repository from both sources"
           exit 1
         fi
         
         # Check for include directory in various possible locations
         if [ -d "$TEMP_DIR/openfx/include" ]; then
           cp -r "$TEMP_DIR/openfx/include" "$OFX_SDK_DIR/"
+          echo "Copied include directory from $TEMP_DIR/openfx/include"
         elif [ -d "$TEMP_DIR/openfx/Include" ]; then
           cp -r "$TEMP_DIR/openfx/Include" "$OFX_SDK_DIR/include"
-        elif [ -d "$TEMP_DIR/openfx/include/ofx" ]; then
-          mkdir -p "$OFX_SDK_DIR/include"
-          cp -r "$TEMP_DIR/openfx/include/ofx" "$OFX_SDK_DIR/include/"
+          echo "Copied Include directory from $TEMP_DIR/openfx/Include"
         else
           echo "Error: OpenFX SDK include directory not found"
           echo "Repository structure:"
