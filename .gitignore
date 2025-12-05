@@ -39,3 +39,29 @@
 
 # debug information files
 *.dwo
+
+# Build directories
+build/
+Build/
+JUCE/
+.vscode/
+.idea/
+*.user
+*.suo
+*.sdf
+*.opensdf
+
+# macOS
+.DS_Store
+*.dSYM
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
