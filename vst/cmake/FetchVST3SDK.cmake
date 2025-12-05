@@ -7,7 +7,7 @@ if(NOT DEFINED VST3_SDK_ROOT OR VST3_SDK_ROOT STREQUAL "")
 endif()
 
 if(NOT DEFINED VST3_SDK_ROOT OR VST3_SDK_ROOT STREQUAL "")
-    set(VST3_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/vst3sdk")
+    set(VST3_SDK_ROOT "${CMAKE_CURRENT_LIST_DIR}/../third_party/vst3sdk")
 endif()
 
 if(NOT EXISTS "${VST3_SDK_ROOT}/CMakeLists.txt")
