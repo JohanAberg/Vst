@@ -45,4 +45,7 @@ private:
     
     // Dry/wet mixing
     float drySample = 0.0f;
+    
+    // Tone control state (per-instance)
+    float toneState = 0.0f;
 };

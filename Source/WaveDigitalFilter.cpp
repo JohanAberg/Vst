@@ -14,6 +14,7 @@ void WaveDigitalFilter::reset()
 {
     a1 = 0.0;
     b1 = 0.0;
+    capacitorState = 0.0;
 }
 
 float WaveDigitalFilter::processSample(float input)
@@ -39,7 +40,6 @@ float WaveDigitalFilter::processSample(float input)
     double output = (a1 + b1) * 0.5;
     
     // Apply capacitor smoothing (low-pass effect)
-    static double capacitorState = 0.0;
     double alpha = 1.0 / (1.0 + 2.0 * juce::MathConstants<double>::pi * C * R * sampleRate);
     capacitorState = alpha * output + (1.0 - alpha) * capacitorState;
     output = capacitorState;

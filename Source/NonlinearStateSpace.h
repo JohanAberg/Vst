@@ -45,6 +45,9 @@ private:
     double tone = 0.5;
     double bias = 0.0;
     
+    // Tone control state (per-instance)
+    double toneState = 0.0;
+    
     // Circuit-specific parameters
     double Vt = 26e-3;  // Thermal voltage (26mV at room temp)
     double Is = 1e-12;  // Saturation current
