@@ -38,6 +38,7 @@ private:
     // State variables
     double a1 = 0.0;  // Incident wave
     double b1 = 0.0;  // Reflected wave
+    double capacitorState = 0.0;  // Capacitor smoothing state (per-instance)
     
     // Nonlinearity parameter
     double nonlinearity = 0.5;

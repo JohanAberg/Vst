@@ -16,6 +16,7 @@ void NonlinearStateSpace::reset()
 {
     x.fill(0.0);
     xPrev.fill(0.0);
+    toneState = 0.0;
 }
 
 float NonlinearStateSpace::processSample(float input)
@@ -44,7 +45,6 @@ float NonlinearStateSpace::processSample(float input)
     }
     
     // Apply tone control (simple high-frequency roll-off)
-    static double toneState = 0.0;
     double toneAlpha = tone;
     toneState = toneAlpha * output + (1.0 - toneAlpha) * toneState;
     output = output * (1.0 - tone * 0.3) + toneState * (tone * 0.3);
