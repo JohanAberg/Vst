@@ -61,30 +61,53 @@ set(OPENCL_KERNELS
 # Include directories
 include_directories(
     ${OFX_SDK_PATH}/include
+    ${OFX_SDK_PATH}/Support/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+# Build OFX Support library
+add_subdirectory(${OFX_SDK_PATH}/Support/Library ${CMAKE_BINARY_DIR}/ofx_support EXCLUDE_FROM_ALL)
+
 # Metal-specific setup (macOS)
+set(HAVE_METAL OFF)
 if(PLATFORM_MACOS)
     # Check if xcrun is available
     find_program(XCRUN_EXECUTABLE xcrun)
     if(XCRUN_EXECUTABLE)
-        # Compile Metal shaders
-        add_custom_command(
-            OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib
-            COMMAND ${XCRUN_EXECUTABLE} -sdk macosx metal -c ${CMAKE_CURRENT_SOURCE_DIR}/kernels/intensitySampler.metal -o ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.air
-            COMMAND ${XCRUN_EXECUTABLE} -sdk macosx metallib ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.air -o ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib
-            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/kernels/intensitySampler.metal
-            COMMENT "Compiling Metal shaders"
-            VERBATIM
+        # Check if Metal toolchain is actually available by testing execution
+        execute_process(
+            COMMAND ${XCRUN_EXECUTABLE} -sdk macosx metal -version
+            OUTPUT_VARIABLE METAL_VERSION_OUTPUT
+            ERROR_VARIABLE METAL_VERSION_ERROR
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE METAL_CHECK_RESULT
         )
-        
-        # Embed Metal library
-        set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib PROPERTIES
-            MACOSX_PACKAGE_LOCATION "Resources"
-        )
+        if(METAL_CHECK_RESULT EQUAL 0)
+            # Metal toolchain is available - compile Metal shaders
+            add_custom_command(
+                OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib
+                COMMAND ${XCRUN_EXECUTABLE} -sdk macosx metal -c ${CMAKE_CURRENT_SOURCE_DIR}/kernels/intensitySampler.metal -o ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.air
+                COMMAND ${XCRUN_EXECUTABLE} -sdk macosx metallib ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.air -o ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib
+                DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/kernels/intensitySampler.metal
+                COMMENT "Compiling Metal shaders"
+                VERBATIM
+            )
+            
+            # Embed Metal library
+            set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib PROPERTIES
+                MACOSX_PACKAGE_LOCATION "Resources"
+            )
+            set(HAVE_METAL ON)
+            message(STATUS "Metal shader compilation enabled")
+        else()
+            message(WARNING "Metal toolchain not available - Metal shader compilation will be skipped")
+            message(STATUS "To enable Metal support, run: xcodebuild -downloadComponent MetalToolchain")
+            set(HAVE_METAL OFF)
+        endif()
     else()
         message(WARNING "xcrun not found - Metal shader compilation will be skipped")
+        set(HAVE_METAL OFF)
     endif()
 endif()
 
@@ -99,6 +122,11 @@ endif()
 
 # Create plugin bundle/library
 if(PLATFORM_MACOS)
+    # Set Objective-C++ for files that use Metal/Objective-C
+    set_source_files_properties(
+        src/GPURenderer.cpp
+        PROPERTIES COMPILE_FLAGS "-x objective-c++"
+    )
     add_library(IntensityProfilePlotter MODULE ${PLUGIN_SOURCES})
     set_target_properties(IntensityProfilePlotter PROPERTIES
         BUNDLE ON
@@ -107,11 +135,12 @@ if(PLATFORM_MACOS)
     )
     
     # Add Metal library if it will be generated
-    if(XCRUN_EXECUTABLE)
+    if(HAVE_METAL)
         target_sources(IntensityProfilePlotter PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/intensitySampler.metallib)
     endif()
     
     target_link_libraries(IntensityProfilePlotter
+        OfxSupport
         ${METAL_FRAMEWORK}
         ${METALKIT_FRAMEWORK}
         ${FOUNDATION_FRAMEWORK}

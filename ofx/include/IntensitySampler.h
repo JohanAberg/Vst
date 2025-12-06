@@ -2,6 +2,7 @@
 #define INTENSITY_SAMPLER_H
 
 #include "ofxImageEffect.h"
+#include "ofxsImageEffect.h"
 #include <vector>
 
 /**

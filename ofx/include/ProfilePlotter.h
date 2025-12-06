@@ -3,6 +3,7 @@
 
 #include "ofxImageEffect.h"
 #include "ofxDrawSuite.h"
+#include "ofxsImageEffect.h"
 #include <vector>
 
 /**
@@ -32,7 +33,7 @@ public:
      * @param imageHeight Height of output image
      */
     void renderPlot(
-        OFX::DrawSuite* drawSuite,
+        const OfxDrawSuiteV1* drawSuite,
         OFX::Image* outputImage,
         const std::vector<float>& redSamples,
         const std::vector<float>& greenSamples,
@@ -48,13 +49,13 @@ public:
 
 private:
     void drawReferenceRamp(
-        OFX::DrawSuite* drawSuite,
+        const OfxDrawSuiteV1* drawSuite,
         int plotX, int plotY,
         int plotWidth, int plotHeight
     );
     
     void drawCurve(
-        OFX::DrawSuite* drawSuite,
+        const OfxDrawSuiteV1* drawSuite,
         const std::vector<float>& samples,
         const double color[4],
         int plotX, int plotY,
@@ -62,7 +63,7 @@ private:
     );
     
     void drawGrid(
-        OFX::DrawSuite* drawSuite,
+        const OfxDrawSuiteV1* drawSuite,
         int plotX, int plotY,
         int plotWidth, int plotHeight
     );

@@ -2,6 +2,7 @@
 #define CPU_RENDERER_H
 
 #include "ofxImageEffect.h"
+#include "ofxsImageEffect.h"
 #include <vector>
 
 /**

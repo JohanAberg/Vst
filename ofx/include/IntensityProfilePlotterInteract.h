@@ -3,6 +3,7 @@
 
 #include "ofxInteract.h"
 #include "ofxParam.h"
+#include "ofxsInteract.h"
 
 class IntensityProfilePlotterPlugin;
 
@@ -13,8 +14,7 @@ class IntensityProfilePlotterPlugin;
 class IntensityProfilePlotterInteract : public OFX::OverlayInteract
 {
 public:
-    IntensityProfilePlotterInteract(OfxInteractHandle handle);
-    IntensityProfilePlotterInteract(IntensityProfilePlotterPlugin* instance);
+    IntensityProfilePlotterInteract(OfxInteractHandle handle, OFX::ImageEffect* effect = nullptr);
     virtual ~IntensityProfilePlotterInteract();
     
     // OFX::Interact overrides
@@ -46,11 +46,11 @@ private:
 };
 
 // Descriptor for the interact
-class IntensityProfilePlotterInteractDescriptor : public OFX::DefaultEffectOverlayDescriptor<IntensityProfilePlotterInteract>
+class IntensityProfilePlotterInteractDescriptor : public OFX::DefaultEffectOverlayDescriptor<IntensityProfilePlotterInteractDescriptor, IntensityProfilePlotterInteract>
 {
 public:
     IntensityProfilePlotterInteractDescriptor()
-        : OFX::DefaultEffectOverlayDescriptor<IntensityProfilePlotterInteract>()
+        : OFX::DefaultEffectOverlayDescriptor<IntensityProfilePlotterInteractDescriptor, IntensityProfilePlotterInteract>()
     {
     }
 };

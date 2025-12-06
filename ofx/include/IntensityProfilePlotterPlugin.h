@@ -4,6 +4,8 @@
 #include "ofxImageEffect.h"
 #include "ofxInteract.h"
 #include "ofxDrawSuite.h"
+#include "ofxsImageEffect.h"
+#include "ofxsInteract.h"
 #include <memory>
 
 class IntensityProfilePlotterInteract;
@@ -36,9 +38,9 @@ public:
     OFX::ChoiceParam* getDataSourceParam() const { return _dataSourceParam; }
     OFX::IntParam* getSampleCountParam() const { return _sampleCountParam; }
     OFX::DoubleParam* getPlotHeightParam() const { return _plotHeightParam; }
-    OFX::RGBAColourDParam* getRedCurveColorParam() const { return _redCurveColorParam; }
-    OFX::RGBAColourDParam* getGreenCurveColorParam() const { return _greenCurveColorParam; }
-    OFX::RGBAColourDParam* getBlueCurveColorParam() const { return _blueCurveColorParam; }
+    OFX::RGBAParam* getRedCurveColorParam() const { return _redCurveColorParam; }
+    OFX::RGBAParam* getGreenCurveColorParam() const { return _greenCurveColorParam; }
+    OFX::RGBAParam* getBlueCurveColorParam() const { return _blueCurveColorParam; }
     OFX::BooleanParam* getShowReferenceRampParam() const { return _showReferenceRampParam; }
 
 private:
@@ -55,9 +57,9 @@ private:
     OFX::ChoiceParam* _dataSourceParam;    // 0=Input Clip, 1=Auxiliary Clip, 2=Built-in Ramp
     OFX::IntParam* _sampleCountParam;       // Number of samples along scan line
     OFX::DoubleParam* _plotHeightParam;    // Height of plot overlay (normalized)
-    OFX::RGBAColourDParam* _redCurveColorParam;
-    OFX::RGBAColourDParam* _greenCurveColorParam;
-    OFX::RGBAColourDParam* _blueCurveColorParam;
+    OFX::RGBAParam* _redCurveColorParam;
+    OFX::RGBAParam* _greenCurveColorParam;
+    OFX::RGBAParam* _blueCurveColorParam;
     OFX::BooleanParam* _showReferenceRampParam;
     
     // Components
