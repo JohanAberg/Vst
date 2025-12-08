@@ -4,10 +4,13 @@
 #include "ofxParam.h"
 
 #include <cmath>
+#include <algorithm>
 #include <OpenGL/gl.h>
 
 static const double POINT_HIT_RADIUS = 15.0; // pixels
 static const double POINT_DISPLAY_RADIUS = 10.0; // pixels
+static const double HANDLE_SIZE = 14.0; // pixels
+static const double HANDLE_HIT_RADIUS = 12.0; // pixels
 
 IntensityProfilePlotterInteract::IntensityProfilePlotterInteract(OfxInteractHandle handle, OFX::ImageEffect* effect)
     : OFX::OverlayInteract(handle)
@@ -16,6 +19,8 @@ IntensityProfilePlotterInteract::IntensityProfilePlotterInteract(OfxInteractHand
     , _lineDragOffset(0.0)
     , _lastMouseX(0.0)
     , _lastMouseY(0.0)
+    , _rectDragStartX(0.0)
+    , _rectDragStartY(0.0)
 {
     // Get the effect instance from the parameter
     if (effect) {
@@ -94,6 +99,32 @@ bool IntensityProfilePlotterInteract::hitTestLine(double x, double y, double px1
     return distance <= (POINT_HIT_RADIUS / pixelScale);
 }
 
+int IntensityProfilePlotterInteract::hitTestRectHandles(double x, double y, double rx, double ry, double rw, double rh, double pixelScale)
+{
+    // Returns drag state for handle or -1 if none
+    struct Handle { double hx, hy; DragState state; };
+    Handle handles[] = {
+        {rx, ry, kDragRectTL},
+        {rx + rw, ry, kDragRectTR},
+        {rx, ry + rh, kDragRectBL},
+        {rx + rw, ry + rh, kDragRectBR}
+    };
+    for (const auto& h : handles) {
+        double dx = x - h.hx;
+        double dy = y - h.hy;
+        double dist = std::sqrt(dx * dx + dy * dy);
+        if (dist <= (HANDLE_HIT_RADIUS / pixelScale)) {
+            return static_cast<int>(h.state);
+        }
+    }
+    return -1;
+}
+
+bool IntensityProfilePlotterInteract::hitTestRectBody(double x, double y, double rx, double ry, double rw, double rh)
+{
+    return x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;
+}
+
 void IntensityProfilePlotterInteract::drawPoint(const OFX::DrawArgs& args, double x, double y, bool selected)
 {
     // Draw using OpenGL immediate mode (deprecated but widely supported in OFX)
@@ -149,6 +180,64 @@ void IntensityProfilePlotterInteract::drawLine(const OFX::DrawArgs& args, double
     glPopAttrib();
 }
 
+void IntensityProfilePlotterInteract::drawRect(const OFX::DrawArgs& args, double rx, double ry, double rw, double rh, bool selected)
+{
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+    glDisable(GL_TEXTURE_2D);
+
+    // Fill (semi-transparent)
+    glColor4f(0.1f, 0.1f, 0.1f, 0.35f);
+    glBegin(GL_QUADS);
+    glVertex2d(rx, ry);
+    glVertex2d(rx + rw, ry);
+    glVertex2d(rx + rw, ry + rh);
+    glVertex2d(rx, ry + rh);
+    glEnd();
+
+    // Border
+    if (selected) {
+        glColor3f(1.0f, 1.0f, 0.0f);
+    } else {
+        glColor3f(0.8f, 0.8f, 0.8f);
+    }
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2d(rx, ry);
+    glVertex2d(rx + rw, ry);
+    glVertex2d(rx + rw, ry + rh);
+    glVertex2d(rx, ry + rh);
+    glEnd();
+
+    glPopAttrib();
+}
+
+void IntensityProfilePlotterInteract::drawHandle(const OFX::DrawArgs& args, double x, double y, bool selected)
+{
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+    glDisable(GL_TEXTURE_2D);
+    if (selected) {
+        glColor3f(1.0f, 1.0f, 0.0f);
+    } else {
+        glColor3f(1.0f, 1.0f, 1.0f);
+    }
+    double half = HANDLE_SIZE * 0.5;
+    glBegin(GL_QUADS);
+    glVertex2d(x - half, y - half);
+    glVertex2d(x + half, y - half);
+    glVertex2d(x + half, y + half);
+    glVertex2d(x - half, y + half);
+    glEnd();
+    glColor3f(0.0f, 0.0f, 0.0f);
+    glLineWidth(1.5f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2d(x - half, y - half);
+    glVertex2d(x + half, y - half);
+    glVertex2d(x + half, y + half);
+    glVertex2d(x - half, y + half);
+    glEnd();
+    glPopAttrib();
+}
+
 bool IntensityProfilePlotterInteract::draw(const OFX::DrawArgs& args)
 {
     if (!_instance) return false;
@@ -160,15 +249,30 @@ bool IntensityProfilePlotterInteract::draw(const OFX::DrawArgs& args)
     double point1[2], point2[2];
     _instance->getPoint1Param()->getValueAtTime(args.time, point1[0], point1[1]);
     _instance->getPoint2Param()->getValueAtTime(args.time, point2[0], point2[1]);
-    
+    double rectPos[2], rectSize[2];
+    _instance->getPlotRectPosParam()->getValueAtTime(args.time, rectPos[0], rectPos[1]);
+    _instance->getPlotRectSizeParam()->getValueAtTime(args.time, rectSize[0], rectSize[1]);
+
     // Convert normalized to pixel coordinates
     double px1, py1, px2, py2;
     normalizedToPixel(point1[0], point1[1], px1, py1);
     normalizedToPixel(point2[0], point2[1], px2, py2);
-    
+    double rx, ry;
+    normalizedToPixel(rectPos[0], rectPos[1], rx, ry);
+    double rw = rectSize[0] * 1920.0;
+    double rh = rectSize[1] * 1080.0;
+
+    // Draw rectangle and handles
+    bool rectSelected = (_dragState == kDragRectMove || _dragState == kDragRectTL || _dragState == kDragRectTR || _dragState == kDragRectBL || _dragState == kDragRectBR);
+    drawRect(args, rx, ry, rw, rh, rectSelected);
+    drawHandle(args, rx, ry, _dragState == kDragRectTL);
+    drawHandle(args, rx + rw, ry, _dragState == kDragRectTR);
+    drawHandle(args, rx, ry + rh, _dragState == kDragRectBL);
+    drawHandle(args, rx + rw, ry + rh, _dragState == kDragRectBR);
+
     // Draw scan line
     drawLine(args, px1, py1, px2, py2);
-    
+
     // Draw endpoints
     bool point1Selected = (_dragState == kDragPoint1);
     bool point2Selected = (_dragState == kDragPoint2);
@@ -194,6 +298,15 @@ bool IntensityProfilePlotterInteract::penDown(const OFX::PenArgs& args)
     double px2 = point2[0] * 1920.0;
     double py2 = point2[1] * 1080.0;
     
+    // Rect info
+    double rectPos[2], rectSize[2];
+    _instance->getPlotRectPosParam()->getValueAtTime(args.time, rectPos[0], rectPos[1]);
+    _instance->getPlotRectSizeParam()->getValueAtTime(args.time, rectSize[0], rectSize[1]);
+    double rx, ry;
+    normalizedToPixel(rectPos[0], rectPos[1], rx, ry);
+    double rw = rectSize[0] * 1920.0;
+    double rh = rectSize[1] * 1080.0;
+
     // Hit test points first (higher priority)
     double pixelScale = args.pixelScale.x;
     if (hitTestPoint(args.penPosition.x, args.penPosition.y, px1, py1, pixelScale)) {
@@ -201,6 +314,31 @@ bool IntensityProfilePlotterInteract::penDown(const OFX::PenArgs& args)
         return true;
     } else if (hitTestPoint(args.penPosition.x, args.penPosition.y, px2, py2, pixelScale)) {
         _dragState = kDragPoint2;
+        return true;
+    }
+
+    // Then test rectangle handles
+    int rectHandle = hitTestRectHandles(args.penPosition.x, args.penPosition.y, rx, ry, rw, rh, pixelScale);
+    if (rectHandle != -1) {
+        _dragState = static_cast<DragState>(rectHandle);
+        _rectDragStartX = args.penPosition.x;
+        _rectDragStartY = args.penPosition.y;
+        _rectStartPos[0] = rectPos[0];
+        _rectStartPos[1] = rectPos[1];
+        _rectStartSize[0] = rectSize[0];
+        _rectStartSize[1] = rectSize[1];
+        return true;
+    }
+
+    // Then test rectangle body for move
+    if (hitTestRectBody(args.penPosition.x, args.penPosition.y, rx, ry, rw, rh)) {
+        _dragState = kDragRectMove;
+        _rectDragStartX = args.penPosition.x;
+        _rectDragStartY = args.penPosition.y;
+        _rectStartPos[0] = rectPos[0];
+        _rectStartPos[1] = rectPos[1];
+        _rectStartSize[0] = rectSize[0];
+        _rectStartSize[1] = rectSize[1];
         return true;
     }
     
@@ -229,49 +367,86 @@ bool IntensityProfilePlotterInteract::penMotion(const OFX::PenArgs& args)
     // Convert pixel to normalized coordinates using simple scaling
     double nx = args.penPosition.x / 1920.0;
     double ny = args.penPosition.y / 1080.0;
-    
-    // Clamp to [0, 1]
     nx = std::max(0.0, std::min(1.0, nx));
     ny = std::max(0.0, std::min(1.0, ny));
-    
+
     // Update parameter
     if (_dragState == kDragPoint1) {
         _instance->getPoint1Param()->setValue(nx, ny);
     } else if (_dragState == kDragPoint2) {
         _instance->getPoint2Param()->setValue(nx, ny);
     } else if (_dragState == kDragLine) {
-        // Get current point positions
         double point1[2], point2[2];
         _instance->getPoint1Param()->getValueAtTime(args.time, point1[0], point1[1]);
         _instance->getPoint2Param()->getValueAtTime(args.time, point2[0], point2[1]);
-        
-        // Calculate mouse delta from last position
+
         double deltaX = args.penPosition.x - _lastMouseX;
         double deltaY = args.penPosition.y - _lastMouseY;
-        
-        // Convert delta to normalized coordinates
         double deltaNormX = deltaX / 1920.0;
         double deltaNormY = deltaY / 1080.0;
-        
-        // Move both points by the delta
+
         double newP1X = point1[0] + deltaNormX;
         double newP1Y = point1[1] + deltaNormY;
         double newP2X = point2[0] + deltaNormX;
         double newP2Y = point2[1] + deltaNormY;
-        
-        // Clamp to [0, 1]
+
         newP1X = std::max(0.0, std::min(1.0, newP1X));
         newP1Y = std::max(0.0, std::min(1.0, newP1Y));
         newP2X = std::max(0.0, std::min(1.0, newP2X));
         newP2Y = std::max(0.0, std::min(1.0, newP2Y));
-        
-        // Update both parameters
+
         _instance->getPoint1Param()->setValue(newP1X, newP1Y);
         _instance->getPoint2Param()->setValue(newP2X, newP2Y);
-        
-        // Update last mouse position
+
         _lastMouseX = args.penPosition.x;
         _lastMouseY = args.penPosition.y;
+    } else if (_dragState == kDragRectMove || _dragState == kDragRectTL || _dragState == kDragRectTR ||
+               _dragState == kDragRectBL || _dragState == kDragRectBR) {
+        double deltaX = (args.penPosition.x - _rectDragStartX) / 1920.0;
+        double deltaY = (args.penPosition.y - _rectDragStartY) / 1080.0;
+
+        double newPosX = _rectStartPos[0];
+        double newPosY = _rectStartPos[1];
+        double newSizeX = _rectStartSize[0];
+        double newSizeY = _rectStartSize[1];
+
+        const double minSize = 0.05;
+
+        if (_dragState == kDragRectMove) {
+            newPosX = _rectStartPos[0] + deltaX;
+            newPosY = _rectStartPos[1] + deltaY;
+        } else {
+            // Resize by adjusting the relevant edges
+            if (_dragState == kDragRectTL || _dragState == kDragRectBL) {
+                double newRight = _rectStartPos[0] + _rectStartSize[0];
+                newPosX = _rectStartPos[0] + deltaX;
+                newPosX = std::max(0.0, std::min(newPosX, newRight - minSize));
+                newSizeX = newRight - newPosX;
+            }
+            if (_dragState == kDragRectTR || _dragState == kDragRectBR) {
+                double newWidth = _rectStartSize[0] + deltaX;
+                newSizeX = std::max(minSize, newWidth);
+            }
+            if (_dragState == kDragRectTL || _dragState == kDragRectTR) {
+                double newBottom = _rectStartPos[1] + _rectStartSize[1];
+                newPosY = _rectStartPos[1] + deltaY;
+                newPosY = std::max(0.0, std::min(newPosY, newBottom - minSize));
+                newSizeY = newBottom - newPosY;
+            }
+            if (_dragState == kDragRectBL || _dragState == kDragRectBR) {
+                double newHeight = _rectStartSize[1] + deltaY;
+                newSizeY = std::max(minSize, newHeight);
+            }
+        }
+
+        // Clamp within [0,1]
+        newPosX = std::max(0.0, std::min(1.0 - newSizeX, newPosX));
+        newPosY = std::max(0.0, std::min(1.0 - newSizeY, newPosY));
+        newSizeX = std::max(minSize, std::min(1.0 - newPosX, newSizeX));
+        newSizeY = std::max(minSize, std::min(1.0 - newPosY, newSizeY));
+
+        _instance->getPlotRectPosParam()->setValue(newPosX, newPosY);
+        _instance->getPlotRectSizeParam()->setValue(newSizeX, newSizeY);
     }
     
     return true;

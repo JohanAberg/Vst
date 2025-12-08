@@ -119,6 +119,21 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     plotHeightParam->setDisplayRange(0.1, 0.8);
     plotHeightParam->setHint("Height of the plot overlay (normalized)");
     plotHeightParam->setAnimates(false);
+
+    // Plot rectangle position (top-left) and size (normalized)
+    OFX::Double2DParamDescriptor* plotRectPosParam = desc.defineDouble2DParam("plotRectPos");
+    plotRectPosParam->setLabel("Plot Rect Position");
+    plotRectPosParam->setDefault(0.05, 0.05);
+    plotRectPosParam->setDisplayRange(0.0, 0.0, 1.0, 1.0);
+    plotRectPosParam->setHint("Top-left normalized position of the plot rectangle");
+    plotRectPosParam->setAnimates(false);
+
+    OFX::Double2DParamDescriptor* plotRectSizeParam = desc.defineDouble2DParam("plotRectSize");
+    plotRectSizeParam->setLabel("Plot Rect Size");
+    plotRectSizeParam->setDefault(0.3, 0.2);
+    plotRectSizeParam->setDisplayRange(0.05, 0.05, 1.0, 1.0);
+    plotRectSizeParam->setHint("Width and height of the plot rectangle (normalized)");
+    plotRectSizeParam->setAnimates(false);
     
     // Line width
     OFX::IntParamDescriptor* lineWidthParam = desc.defineIntParam("lineWidth");
@@ -182,6 +197,8 @@ IntensityProfilePlotterPlugin::IntensityProfilePlotterPlugin(OfxImageEffectHandl
     , _dataSourceParam(nullptr)
     , _sampleCountParam(nullptr)
     , _plotHeightParam(nullptr)
+    , _plotRectPosParam(nullptr)
+    , _plotRectSizeParam(nullptr)
     , _lineWidthParam(nullptr)
     , _redCurveColorParam(nullptr)
     , _greenCurveColorParam(nullptr)
@@ -220,6 +237,8 @@ void IntensityProfilePlotterPlugin::setupParameters()
     _dataSourceParam = fetchChoiceParam("dataSource");
     _sampleCountParam = fetchIntParam("sampleCount");
     _plotHeightParam = fetchDoubleParam("plotHeight");
+    _plotRectPosParam = fetchDouble2DParam("plotRectPos");
+    _plotRectSizeParam = fetchDouble2DParam("plotRectSize");
     _lineWidthParam = fetchIntParam("lineWidth");
     _redCurveColorParam = fetchRGBAParam("redCurveColor");
     _greenCurveColorParam = fetchRGBAParam("greenCurveColor");
@@ -277,6 +296,10 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
     _sampleCountParam->getValueAtTime(args.time, sampleCount);
     double plotHeight;
     _plotHeightParam->getValueAtTime(args.time, plotHeight);
+    double plotRectPos[2];
+    _plotRectPosParam->getValueAtTime(args.time, plotRectPos[0], plotRectPos[1]);
+    double plotRectSize[2];
+    _plotRectSizeParam->getValueAtTime(args.time, plotRectSize[0], plotRectSize[1]);
     int lineWidth;
     _lineWidthParam->getValueAtTime(args.time, lineWidth);
     
@@ -341,51 +364,80 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
         }
     }
     
-    // Render plot overlay directly into the output buffer
+    // Render plot overlay directly into the output buffer inside a shaded rectangle
     if (!redSamples.empty() && !greenSamples.empty() && !blueSamples.empty()) {
         float* dstData = (float*)outputImg->getPixelData();
         int nComponents = (outputImg->getPixelComponents() == OFX::ePixelComponentRGBA) ? 4 : 3;
         int rowBytes = outputImg->getRowBytes();
-        
-        // Calculate plot area (bottom portion of image)
-        int plotHeightPx = static_cast<int>(dstHeight * plotHeight);
-        
-        // Draw the intensity curves
+
+        // Compute rectangle bounds in pixels (clamped to frame)
+        int rectX = static_cast<int>(plotRectPos[0] * dstWidth);
+        int rectY = static_cast<int>(plotRectPos[1] * dstHeight);
+        int rectW = static_cast<int>(plotRectSize[0] * dstWidth);
+        int rectH = static_cast<int>(plotRectSize[1] * dstHeight);
+        rectX = std::max(0, std::min(rectX, dstWidth - 1));
+        rectY = std::max(0, std::min(rectY, dstHeight - 1));
+        rectW = std::max(10, std::min(rectW, dstWidth - rectX));
+        rectH = std::max(10, std::min(rectH, dstHeight - rectY));
+
+        // Shade background (simple alpha blend toward dark gray)
+        const float shadeR = 0.1f, shadeG = 0.1f, shadeB = 0.1f, shadeA = 0.35f;
+        for (int y = rectY; y < rectY + rectH; ++y) {
+            for (int x = rectX; x < rectX + rectW; ++x) {
+                int offset = (y * dstWidth + x) * nComponents;
+                dstData[offset + 0] = dstData[offset + 0] * (1.0f - shadeA) + shadeR * shadeA;
+                dstData[offset + 1] = dstData[offset + 1] * (1.0f - shadeA) + shadeG * shadeA;
+                dstData[offset + 2] = dstData[offset + 2] * (1.0f - shadeA) + shadeB * shadeA;
+                if (nComponents == 4) dstData[offset + 3] = 1.0f;
+            }
+        }
+
+        // Plot height within the rectangle (scaled by plotHeight parameter)
+        int plotHeightPx = static_cast<int>(rectH * plotHeight);
+        plotHeightPx = std::max(1, std::min(plotHeightPx, rectH));
+        int yBase = rectY + rectH - 1;
+
+        // Draw the intensity curves mapped into the rectangle
         for (int i = 0; i < sampleCount - 1; ++i) {
             float x1 = static_cast<float>(i) / static_cast<float>(sampleCount - 1);
             float x2 = static_cast<float>(i + 1) / static_cast<float>(sampleCount - 1);
-            
-            int px1 = static_cast<int>(x1 * dstWidth);
-            int px2 = static_cast<int>(x2 * dstWidth);
-            
-            // Draw red curve
-            int py1_r = static_cast<int>(redSamples[i] * plotHeightPx);
-            int py2_r = static_cast<int>(redSamples[i + 1] * plotHeightPx);
+
+            int px1 = rectX + static_cast<int>(x1 * (rectW - 1));
+            int px2 = rectX + static_cast<int>(x2 * (rectW - 1));
+
+            // Draw red curve (values mapped to vertical range inside rect)
+            int py1_r = yBase - static_cast<int>(redSamples[i] * plotHeightPx);
+            int py2_r = yBase - static_cast<int>(redSamples[i + 1] * plotHeightPx);
             drawLine(dstData, dstWidth, dstHeight, nComponents, rowBytes,
-                     px1, py1_r, px2, py2_r, redColor[0], redColor[1], redColor[2], lineWidth);
-            
+                     px1, py1_r, px2, py2_r, redColor[0], redColor[1], redColor[2], lineWidth,
+                     rectX, rectY, rectW, rectH);
+
             // Draw green curve
-            int py1_g = static_cast<int>(greenSamples[i] * plotHeightPx);
-            int py2_g = static_cast<int>(greenSamples[i + 1] * plotHeightPx);
+            int py1_g = yBase - static_cast<int>(greenSamples[i] * plotHeightPx);
+            int py2_g = yBase - static_cast<int>(greenSamples[i + 1] * plotHeightPx);
             drawLine(dstData, dstWidth, dstHeight, nComponents, rowBytes,
-                     px1, py1_g, px2, py2_g, greenColor[0], greenColor[1], greenColor[2], lineWidth);
-            
+                     px1, py1_g, px2, py2_g, greenColor[0], greenColor[1], greenColor[2], lineWidth,
+                     rectX, rectY, rectW, rectH);
+
             // Draw blue curve
-            int py1_b = static_cast<int>(blueSamples[i] * plotHeightPx);
-            int py2_b = static_cast<int>(blueSamples[i + 1] * plotHeightPx);
+            int py1_b = yBase - static_cast<int>(blueSamples[i] * plotHeightPx);
+            int py2_b = yBase - static_cast<int>(blueSamples[i + 1] * plotHeightPx);
             drawLine(dstData, dstWidth, dstHeight, nComponents, rowBytes,
-                     px1, py1_b, px2, py2_b, blueColor[0], blueColor[1], blueColor[2], lineWidth);
+                     px1, py1_b, px2, py2_b, blueColor[0], blueColor[1], blueColor[2], lineWidth,
+                     rectX, rectY, rectW, rectH);
         }
     }
 }
 
 void IntensityProfilePlotterPlugin::drawLine(float* buffer, int width, int height, int nComp, int rowBytes,
                                               int x1, int y1, int x2, int y2, 
-                                              float r, float g, float b, int lineWidth)
+                                              float r, float g, float b, int lineWidth,
+                                              int clipX, int clipY, int clipW, int clipH)
 {
     // Helper function to set a pixel
     auto setPixel = [&](int px, int py) {
-        if (px >= 0 && px < width && py >= 0 && py < height) {
+        if (px >= clipX && px < clipX + clipW && py >= clipY && py < clipY + clipH &&
+            px >= 0 && px < width && py >= 0 && py < height) {
             int offset = (py * width + px) * nComp;
             buffer[offset + 0] = r;
             buffer[offset + 1] = g;
