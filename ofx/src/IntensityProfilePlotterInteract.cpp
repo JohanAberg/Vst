@@ -6,8 +6,8 @@
 #include <cmath>
 #include <OpenGL/gl.h>
 
-static const double POINT_HIT_RADIUS = 5.0; // pixels
-static const double POINT_DISPLAY_RADIUS = 6.0; // pixels
+static const double POINT_HIT_RADIUS = 15.0; // pixels
+static const double POINT_DISPLAY_RADIUS = 10.0; // pixels
 
 IntensityProfilePlotterInteract::IntensityProfilePlotterInteract(OfxInteractHandle handle, OFX::ImageEffect* effect)
     : OFX::OverlayInteract(handle)
