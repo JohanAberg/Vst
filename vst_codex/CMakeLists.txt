@@ -58,10 +58,18 @@ target_include_directories(AnalogCircuitSaturation
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${VST3_SDK_ROOT})
 
+# Define build configuration macros for VST3 SDK
+target_compile_definitions(AnalogCircuitSaturation
+    PRIVATE
+        $<$<CONFIG:Debug>:_DEBUG=1>
+        $<$<CONFIG:Release>:RELEASE=1>
+        $<$<CONFIG:RelWithDebInfo>:RELEASE=1>
+        $<$<CONFIG:MinSizeRel>:RELEASE=1>)
+
+# Link VST3 SDK libraries
+smtg_target_configure_version_file(AnalogCircuitSaturation)
+
 target_link_libraries(AnalogCircuitSaturation
     PRIVATE
         analog_saturation_core
-        base
-        sdk
-        sdk_common
-        pluginterfaces)
+        sdk)

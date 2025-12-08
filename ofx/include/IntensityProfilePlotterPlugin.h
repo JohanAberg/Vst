@@ -46,9 +46,12 @@ public:
 private:
     void setupParameters();
     void setupClips();
+    void drawLine(float* buffer, int width, int height, int nComp, int rowBytes,
+                  int x1, int y1, int x2, int y2, float r, float g, float b);
     
     // Clips
     OFX::Clip* _srcClip;
+    OFX::Clip* _dstClip;
     OFX::Clip* _auxClip;
     
     // Parameters

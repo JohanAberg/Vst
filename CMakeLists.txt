@@ -26,7 +26,7 @@ if(BUILD_OFX_PLUGIN)
     else()
         message(STATUS "Building OFX plugin: Intensity Profile Plotter")
         message(STATUS "OFX SDK path: ${OFX_SDK_PATH}")
-        add_subdirectory(plugin)
+        add_subdirectory(ofx)
     endif()
 endif()
 

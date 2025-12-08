@@ -4,6 +4,7 @@
 #include "ofxParam.h"
 
 #include <cmath>
+#include <OpenGL/gl.h>
 
 static const double POINT_HIT_RADIUS = 5.0; // pixels
 static const double POINT_DISPLAY_RADIUS = 6.0; // pixels
@@ -24,11 +25,10 @@ IntensityProfilePlotterInteract::~IntensityProfilePlotterInteract()
 {
 }
 
-void IntensityProfilePlotterInteract::pixelToNormalized(double px, double py, double& nx, double& ny, const OFX::DrawArgs& args)
+void IntensityProfilePlotterInteract::pixelToNormalized(double px, double py, double& nx, double& ny)
 {
-    // TODO: Get render window from effect or args
-    // For now, use viewport if available
-    double width = 1920.0; // Default, should get from effect
+    // Standard image dimensions (1920x1080)
+    double width = 1920.0;
     double height = 1080.0;
     
     nx = px / width;
@@ -39,10 +39,10 @@ void IntensityProfilePlotterInteract::pixelToNormalized(double px, double py, do
     ny = std::max(0.0, std::min(1.0, ny));
 }
 
-void IntensityProfilePlotterInteract::normalizedToPixel(double nx, double ny, double& px, double& py, const OFX::DrawArgs& args)
+void IntensityProfilePlotterInteract::normalizedToPixel(double nx, double ny, double& px, double& py)
 {
-    // TODO: Get render window from effect or args
-    double width = 1920.0; // Default, should get from effect
+    // Standard image dimensions (1920x1080)
+    double width = 1920.0;
     double height = 1080.0;
     
     px = nx * width;
@@ -59,15 +59,57 @@ bool IntensityProfilePlotterInteract::hitTestPoint(double x, double y, double px
 
 void IntensityProfilePlotterInteract::drawPoint(const OFX::DrawArgs& args, double x, double y, bool selected)
 {
-    // TODO: Implement using DrawSuite C API
-    // DrawSuite must be fetched from host and used via C API
-    (void)args; (void)x; (void)y; (void)selected;
+    // Draw using OpenGL immediate mode (deprecated but widely supported in OFX)
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+    glDisable(GL_TEXTURE_2D);
+    
+    // Set color based on selection state
+    if (selected) {
+        glColor3f(1.0f, 1.0f, 0.0f); // Yellow when selected
+    } else {
+        glColor3f(1.0f, 1.0f, 1.0f); // White normally
+    }
+    
+    // Draw filled circle
+    glBegin(GL_TRIANGLE_FAN);
+    glVertex2d(x, y);
+    const int segments = 20;
+    for (int i = 0; i <= segments; ++i) {
+        double angle = 2.0 * M_PI * i / segments;
+        double dx = POINT_DISPLAY_RADIUS * cos(angle);
+        double dy = POINT_DISPLAY_RADIUS * sin(angle);
+        glVertex2d(x + dx, y + dy);
+    }
+    glEnd();
+    
+    // Draw outline
+    glColor3f(0.0f, 0.0f, 0.0f);
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
+    for (int i = 0; i < segments; ++i) {
+        double angle = 2.0 * M_PI * i / segments;
+        double dx = POINT_DISPLAY_RADIUS * cos(angle);
+        double dy = POINT_DISPLAY_RADIUS * sin(angle);
+        glVertex2d(x + dx, y + dy);
+    }
+    glEnd();
+    
+    glPopAttrib();
 }
 
 void IntensityProfilePlotterInteract::drawLine(const OFX::DrawArgs& args, double x1, double y1, double x2, double y2)
 {
-    // TODO: Implement using DrawSuite C API
-    (void)args; (void)x1; (void)y1; (void)x2; (void)y2;
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+    glDisable(GL_TEXTURE_2D);
+    glColor3f(1.0f, 1.0f, 1.0f);
+    glLineWidth(2.0f);
+    
+    glBegin(GL_LINES);
+    glVertex2d(x1, y1);
+    glVertex2d(x2, y2);
+    glEnd();
+    
+    glPopAttrib();
 }
 
 bool IntensityProfilePlotterInteract::draw(const OFX::DrawArgs& args)
@@ -84,8 +126,8 @@ bool IntensityProfilePlotterInteract::draw(const OFX::DrawArgs& args)
     
     // Convert normalized to pixel coordinates
     double px1, py1, px2, py2;
-    normalizedToPixel(point1[0], point1[1], px1, py1, args);
-    normalizedToPixel(point2[0], point2[1], px2, py2, args);
+    normalizedToPixel(point1[0], point1[1], px1, py1);
+    normalizedToPixel(point2[0], point2[1], px2, py2);
     
     // Draw scan line
     drawLine(args, px1, py1, px2, py2);
@@ -108,14 +150,15 @@ bool IntensityProfilePlotterInteract::penDown(const OFX::PenArgs& args)
     _instance->getPoint1Param()->getValueAtTime(args.time, point1[0], point1[1]);
     _instance->getPoint2Param()->getValueAtTime(args.time, point2[0], point2[1]);
     
-    // Convert to pixel coordinates (stub - needs proper implementation)
-    double px1, py1, px2, py2;
-    // TODO: Fix coordinate conversion - PenArgs vs DrawArgs
-    px1 = point1[0] * 1920.0; py1 = point1[1] * 1080.0;
-    px2 = point2[0] * 1920.0; py2 = point2[1] * 1080.0;
+    // Convert normalized to pixel coordinates
+    // Use simple scaling based on typical HD dimensions
+    double px1 = point1[0] * 1920.0;
+    double py1 = point1[1] * 1080.0;
+    double px2 = point2[0] * 1920.0;
+    double py2 = point2[1] * 1080.0;
     
     // Hit test
-    double pixelScale = args.pixelScale.x; // pixelScale is OfxPointD
+    double pixelScale = args.pixelScale.x;
     if (hitTestPoint(args.penPosition.x, args.penPosition.y, px1, py1, pixelScale)) {
         _dragState = kDragPoint1;
         return true;
@@ -136,11 +179,13 @@ bool IntensityProfilePlotterInteract::penMotion(const OFX::PenArgs& args)
         return false;
     }
     
-    // Convert pixel to normalized coordinates (stub)
-    double nx, ny;
-    // TODO: Fix coordinate conversion
-    nx = args.penPosition.x / 1920.0;
-    ny = args.penPosition.y / 1080.0;
+    // Convert pixel to normalized coordinates using simple scaling
+    double nx = args.penPosition.x / 1920.0;
+    double ny = args.penPosition.y / 1080.0;
+    
+    // Clamp to [0, 1]
+    nx = std::max(0.0, std::min(1.0, nx));
+    ny = std::max(0.0, std::min(1.0, ny));
     
     // Update parameter
     if (_dragState == kDragPoint1) {

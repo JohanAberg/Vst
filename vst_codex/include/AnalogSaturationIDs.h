@@ -23,6 +23,6 @@ enum ParamIds : Steinberg::Vst::ParamID {
     kBypass
 };
 
-inline constexpr Steinberg::int32 kNumParameters = 8;
+inline constexpr Steinberg::int32 kNumParameters = 9;
 
 } // namespace analog::ids

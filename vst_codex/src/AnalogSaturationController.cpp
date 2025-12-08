@@ -77,6 +77,7 @@ tresult PLUGIN_API AnalogSaturationController::setComponentState(IBStream* state
         setParamNormalized(ids::kDynamics, settings.dynamics);
         setParamNormalized(ids::kSlew, settings.slew);
         setParamNormalized(ids::kQuality, settings.quality);
+        setParamNormalized(ids::kBypass, settings.bypass);
     }
 
     return kResultOk;

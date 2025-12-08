@@ -16,6 +16,9 @@
 #include <cmath>
 #include <cstring>
 
+// Interact factory
+typedef OFX::DefaultEffectOverlayDescriptor<IntensityProfilePlotterInteractDescriptor, IntensityProfilePlotterInteract> IntensityProfilePlotterInteractFactory;
+
 // Plugin factory
 mDeclarePluginFactory(IntensityProfilePlotterPluginFactory, {}, {});
 
@@ -28,12 +31,11 @@ void IntensityProfilePlotterPluginFactory::describe(OFX::ImageEffectDescriptor& 
         "Provides interactive scan line selection with RGB curve plotting and LUT testing capabilities."
     );
     
-    // Plugin version
-    desc.setVersion(1, 0, 0, 0, 0);
+    // Plugin version (major, minor, micro, build, label)
+    desc.setVersion(1, 0, 0, 0, "");
     
-    // Supported contexts
+    // Supported contexts - only Filter for video effects
     desc.addSupportedContext(OFX::eContextFilter);
-    desc.addSupportedContext(OFX::eContextGeneral);
     
     // Supported pixel depths
     desc.addSupportedBitDepth(OFX::eBitDepthFloat);
@@ -41,31 +43,36 @@ void IntensityProfilePlotterPluginFactory::describe(OFX::ImageEffectDescriptor& 
     // Set render thread safety
     desc.setRenderThreadSafety(OFX::eRenderInstanceSafe);
     
-    // Enable GPU rendering
+    // Standard flags
+    desc.setSingleInstance(false);
+    desc.setHostFrameThreading(false);
     desc.setSupportsMultiResolution(true);
     desc.setSupportsTiles(true);
     desc.setTemporalClipAccess(false);
     desc.setRenderTwiceAlways(false);
     desc.setSupportsMultipleClipPARs(false);
-    
-    // Enable interact (overlays are supported via interact descriptor)
 }
 
 void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDescriptor& desc, OFX::ContextEnum context)
 {
     // Source clip
     OFX::ClipDescriptor* srcClip = desc.defineClip(kOfxImageEffectSimpleSourceClipName);
-    srcClip->addSupportedComponent(OFX::ePixelComponentRGB);
     srcClip->addSupportedComponent(OFX::ePixelComponentRGBA);
+    srcClip->addSupportedComponent(OFX::ePixelComponentAlpha);
     srcClip->setTemporalClipAccess(false);
     srcClip->setSupportsTiles(true);
     srcClip->setIsMask(false);
-    srcClip->setOptional(false);
+    
+    // Output clip (required for video effects)
+    OFX::ClipDescriptor* outClip = desc.defineClip(kOfxImageEffectOutputClipName);
+    outClip->addSupportedComponent(OFX::ePixelComponentRGBA);
+    outClip->addSupportedComponent(OFX::ePixelComponentAlpha);
+    outClip->setSupportsTiles(true);
     
     // Auxiliary clip (optional)
     OFX::ClipDescriptor* auxClip = desc.defineClip("Auxiliary");
-    auxClip->addSupportedComponent(OFX::ePixelComponentRGB);
     auxClip->addSupportedComponent(OFX::ePixelComponentRGBA);
+    auxClip->addSupportedComponent(OFX::ePixelComponentAlpha);
     auxClip->setTemporalClipAccess(false);
     auxClip->setSupportsTiles(true);
     auxClip->setIsMask(false);
@@ -126,6 +133,9 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     showRampParam->setLabel("Show Reference Ramp");
     showRampParam->setDefault(true);
     showRampParam->setHint("Display linear 0-1 grayscale ramp background");
+    
+    // Set up overlay interact
+    desc.setOverlayInteractDescriptor(new OFX::DefaultEffectOverlayDescriptor<IntensityProfilePlotterInteractDescriptor, IntensityProfilePlotterInteract>());
 }
 
 OFX::ImageEffect* IntensityProfilePlotterPluginFactory::createInstance(OfxImageEffectHandle handle, OFX::ContextEnum context)
@@ -148,6 +158,7 @@ void getPluginIDs(OFX::PluginFactoryArray &ids)
 IntensityProfilePlotterPlugin::IntensityProfilePlotterPlugin(OfxImageEffectHandle handle)
     : ImageEffect(handle)
     , _srcClip(nullptr)
+    , _dstClip(nullptr)
     , _auxClip(nullptr)
     , _point1Param(nullptr)
     , _point2Param(nullptr)
@@ -180,6 +191,7 @@ void IntensityProfilePlotterPlugin::setupClips()
 {
     _srcClip = fetchClip(kOfxImageEffectSimpleSourceClipName);
     _auxClip = fetchClip("Auxiliary");
+    _dstClip = fetchClip(kOfxImageEffectOutputClipName);
 }
 
 void IntensityProfilePlotterPlugin::setupParameters()
@@ -308,19 +320,77 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
         }
     }
     
-    // Render plot overlay using DrawSuite
-    // Note: DrawSuite must be fetched from host via fetchSuite
-    // For now, we'll skip overlay rendering - can be added later if needed
-    // const OfxDrawSuiteV1* drawSuite = static_cast<const OfxDrawSuiteV1*>(fetchSuite(kOfxDrawSuite));
-    // if (drawSuite) {
-    //     _plotter->renderPlot(
-    //         drawSuite,
-    //         outputImg,
-    //         redSamples, greenSamples, blueSamples,
-    //         redColor, greenColor, blueColor,
-    //         plotHeight,
-    //         showReferenceRamp,
-    //         dstWidth, dstHeight
-    //     );
-    // }
+    // Render plot overlay directly into the output buffer
+    if (!redSamples.empty() && !greenSamples.empty() && !blueSamples.empty()) {
+        float* dstData = (float*)outputImg->getPixelData();
+        int nComponents = (outputImg->getPixelComponents() == OFX::ePixelComponentRGBA) ? 4 : 3;
+        int rowBytes = outputImg->getRowBytes();
+        
+        // Calculate plot area (bottom portion of image)
+        int plotHeightPx = static_cast<int>(dstHeight * plotHeight);
+        
+        // Draw the intensity curves
+        for (int i = 0; i < sampleCount - 1; ++i) {
+            float x1 = static_cast<float>(i) / static_cast<float>(sampleCount - 1);
+            float x2 = static_cast<float>(i + 1) / static_cast<float>(sampleCount - 1);
+            
+            int px1 = static_cast<int>(x1 * dstWidth);
+            int px2 = static_cast<int>(x2 * dstWidth);
+            
+            // Draw red curve
+            int py1_r = static_cast<int>(redSamples[i] * plotHeightPx);
+            int py2_r = static_cast<int>(redSamples[i + 1] * plotHeightPx);
+            drawLine(dstData, dstWidth, dstHeight, nComponents, rowBytes,
+                     px1, py1_r, px2, py2_r, redColor[0], redColor[1], redColor[2]);
+            
+            // Draw green curve
+            int py1_g = static_cast<int>(greenSamples[i] * plotHeightPx);
+            int py2_g = static_cast<int>(greenSamples[i + 1] * plotHeightPx);
+            drawLine(dstData, dstWidth, dstHeight, nComponents, rowBytes,
+                     px1, py1_g, px2, py2_g, greenColor[0], greenColor[1], greenColor[2]);
+            
+            // Draw blue curve
+            int py1_b = static_cast<int>(blueSamples[i] * plotHeightPx);
+            int py2_b = static_cast<int>(blueSamples[i + 1] * plotHeightPx);
+            drawLine(dstData, dstWidth, dstHeight, nComponents, rowBytes,
+                     px1, py1_b, px2, py2_b, blueColor[0], blueColor[1], blueColor[2]);
+        }
+    }
+}
+
+void IntensityProfilePlotterPlugin::drawLine(float* buffer, int width, int height, int nComp, int rowBytes,
+                                              int x1, int y1, int x2, int y2, 
+                                              float r, float g, float b)
+{
+    // Simple Bresenham line drawing
+    int dx = abs(x2 - x1);
+    int dy = abs(y2 - y1);
+    int sx = (x1 < x2) ? 1 : -1;
+    int sy = (y1 < y2) ? 1 : -1;
+    int err = dx - dy;
+    
+    int x = x1, y = y1;
+    
+    while (true) {
+        // Set pixel if in bounds
+        if (x >= 0 && x < width && y >= 0 && y < height) {
+            int offset = (y * width + x) * nComp;
+            buffer[offset + 0] = r;
+            buffer[offset + 1] = g;
+            buffer[offset + 2] = b;
+            if (nComp == 4) buffer[offset + 3] = 1.0f;
+        }
+        
+        if (x == x2 && y == y2) break;
+        
+        int e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y += sy;
+        }
+    }
 }

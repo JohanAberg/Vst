@@ -88,6 +88,7 @@ void AnalogSaturationProcessor::syncModelWithParameters()
     settings.slew = slew_.target;
     settings.outputTrim = outputTrim_.target;
     settings.quality = std::clamp(settings.quality, 0.0F, 1.0F);
+    settings.bypass = bypass_;
     model_.setSettings(settings);
 }
 
@@ -126,12 +127,14 @@ tresult PLUGIN_API AnalogSaturationProcessor::setState(IBStream* state)
     outputTrim_.setCurrent(settings.outputTrim);
     dynamics_.setCurrent(settings.dynamics);
     slew_.setCurrent(settings.slew);
+    bypass_ = settings.bypass;
     return kResultOk;
 }
 
 tresult PLUGIN_API AnalogSaturationProcessor::getState(IBStream* state)
 {
     auto settings = model_.getSettings();
+    settings.bypass = bypass_;
     readOrWriteState(state, &settings, sizeof(settings), true);
     return kResultOk;
 }
@@ -182,10 +185,6 @@ float AnalogSaturationProcessor::SmoothedValue::getNext()
 
 tresult PLUGIN_API AnalogSaturationProcessor::process(ProcessData& data)
 {
-    if (data.numInputs == 0 || data.numOutputs == 0) {
-        return kResultOk;
-    }
-
     Vst::IParameterChanges* params = data.inputParameterChanges;
     if (params) {
         const int32 numParams = params->getParameterCount();
@@ -236,6 +235,10 @@ tresult PLUGIN_API AnalogSaturationProcessor::process(ProcessData& data)
     }
 
     syncModelWithParameters();
+
+    if (data.numInputs == 0 || data.numOutputs == 0) {
+        return kResultOk;
+    }
 
     const bool is64Bit = data.symbolicSampleSize == kSample64;
 

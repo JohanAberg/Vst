@@ -41,8 +41,8 @@ private:
     void drawLine(const OFX::DrawArgs& args, double x1, double y1, double x2, double y2);
     
     // Convert between pixel and normalized coordinates
-    void pixelToNormalized(double px, double py, double& nx, double& ny, const OFX::DrawArgs& args);
-    void normalizedToPixel(double nx, double ny, double& px, double& py, const OFX::DrawArgs& args);
+    void pixelToNormalized(double px, double py, double& nx, double& ny);
+    void normalizedToPixel(double nx, double ny, double& px, double& py);
 };
 
 // Descriptor for the interact

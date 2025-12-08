@@ -15,6 +15,7 @@ struct SaturationSettings {
     float dynamics = 0.5F;
     float slew = 0.5F;
     float quality = 1.0F; // 0 = eco, 1 = high
+    float bypass = 0.0F;  // 0 = off, 1 = on
 };
 
 class SaturationModel {

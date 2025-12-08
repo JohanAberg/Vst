@@ -5,8 +5,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# OFX SDK path - adjust as needed
-set(OFX_SDK_PATH "${CMAKE_CURRENT_SOURCE_DIR}/ofx-sdk" CACHE PATH "Path to OpenFX SDK")
+# OFX SDK path - use parent's definition if available, otherwise default to local
+if(NOT DEFINED OFX_SDK_PATH)
+    set(OFX_SDK_PATH "${CMAKE_CURRENT_SOURCE_DIR}/ofx-sdk" CACHE PATH "Path to OpenFX SDK")
+endif()
 
 # Verify OFX SDK path exists
 if(NOT EXISTS "${OFX_SDK_PATH}")
@@ -23,6 +25,7 @@ if(APPLE)
     find_library(METAL_FRAMEWORK Metal)
     find_library(METALKIT_FRAMEWORK MetalKit)
     find_library(FOUNDATION_FRAMEWORK Foundation)
+    find_library(OPENGL_FRAMEWORK OpenGL)
 elseif(WIN32)
     set(PLATFORM_WINDOWS ON)
 elseif(UNIX)
@@ -131,6 +134,8 @@ if(PLATFORM_MACOS)
     set_target_properties(IntensityProfilePlotter PROPERTIES
         BUNDLE ON
         BUNDLE_EXTENSION "ofx"
+        PREFIX ""
+        SUFFIX ".ofx"
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/Info.plist
     )
     
@@ -144,6 +149,7 @@ if(PLATFORM_MACOS)
         ${METAL_FRAMEWORK}
         ${METALKIT_FRAMEWORK}
         ${FOUNDATION_FRAMEWORK}
+        ${OPENGL_FRAMEWORK}
     )
     
     if(HAVE_OPENCL)
