@@ -103,6 +103,13 @@ jobs:
           exit 1
         fi
         
+        # Copy Support directory (required for OFX plugin builds)
+        if [ -d "$TEMP_DIR/openfx/Support" ]; then
+          cp -r "$TEMP_DIR/openfx/Support" "$OFX_SDK_DIR/"
+        else
+          echo "Warning: Support directory not found in OpenFX SDK"
+        fi
+        
         # Copy lib directory if it exists (optional)
         [ -d "$TEMP_DIR/openfx/lib" ] && cp -r "$TEMP_DIR/openfx/lib" "$OFX_SDK_DIR/" || true
         [ -d "$TEMP_DIR/openfx/Lib" ] && cp -r "$TEMP_DIR/openfx/Lib" "$OFX_SDK_DIR/lib" || true
