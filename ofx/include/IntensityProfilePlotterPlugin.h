@@ -38,6 +38,7 @@ public:
     OFX::ChoiceParam* getDataSourceParam() const { return _dataSourceParam; }
     OFX::IntParam* getSampleCountParam() const { return _sampleCountParam; }
     OFX::DoubleParam* getPlotHeightParam() const { return _plotHeightParam; }
+    OFX::IntParam* getLineWidthParam() const { return _lineWidthParam; }
     OFX::RGBAParam* getRedCurveColorParam() const { return _redCurveColorParam; }
     OFX::RGBAParam* getGreenCurveColorParam() const { return _greenCurveColorParam; }
     OFX::RGBAParam* getBlueCurveColorParam() const { return _blueCurveColorParam; }
@@ -47,7 +48,7 @@ private:
     void setupParameters();
     void setupClips();
     void drawLine(float* buffer, int width, int height, int nComp, int rowBytes,
-                  int x1, int y1, int x2, int y2, float r, float g, float b);
+                  int x1, int y1, int x2, int y2, float r, float g, float b, int lineWidth);
     
     // Clips
     OFX::Clip* _srcClip;
@@ -60,6 +61,7 @@ private:
     OFX::ChoiceParam* _dataSourceParam;    // 0=Input Clip, 1=Auxiliary Clip, 2=Built-in Ramp
     OFX::IntParam* _sampleCountParam;       // Number of samples along scan line
     OFX::DoubleParam* _plotHeightParam;    // Height of plot overlay (normalized)
+    OFX::IntParam* _lineWidthParam;         // Line width in pixels
     OFX::RGBAParam* _redCurveColorParam;
     OFX::RGBAParam* _greenCurveColorParam;
     OFX::RGBAParam* _blueCurveColorParam;

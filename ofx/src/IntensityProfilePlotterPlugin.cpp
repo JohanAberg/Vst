@@ -85,6 +85,7 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     point1Param->setDefault(0.2, 0.5);
     point1Param->setDisplayRange(0.0, 0.0, 1.0, 1.0);
     point1Param->setDimensionLabels("X", "Y");
+    point1Param->setAnimates(false);
     
     // Point 2
     OFX::Double2DParamDescriptor* point2Param = desc.defineDouble2DParam("point2");
@@ -92,6 +93,7 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     point2Param->setDefault(0.8, 0.5);
     point2Param->setDisplayRange(0.0, 0.0, 1.0, 1.0);
     point2Param->setDimensionLabels("X", "Y");
+    point2Param->setAnimates(false);
     
     // Data source
     OFX::ChoiceParamDescriptor* dataSourceParam = desc.defineChoiceParam("dataSource");
@@ -100,6 +102,7 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     dataSourceParam->appendOption("Auxiliary Clip");
     dataSourceParam->appendOption("Built-in Ramp (LUT Test)");
     dataSourceParam->setDefault(0);
+    dataSourceParam->setAnimates(false);
     
     // Sample count
     OFX::IntParamDescriptor* sampleCountParam = desc.defineIntParam("sampleCount");
@@ -107,6 +110,7 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     sampleCountParam->setDefault(512);
     sampleCountParam->setDisplayRange(64, 2048);
     sampleCountParam->setHint("Number of samples along the scan line");
+    sampleCountParam->setAnimates(false);
     
     // Plot height
     OFX::DoubleParamDescriptor* plotHeightParam = desc.defineDoubleParam("plotHeight");
@@ -114,25 +118,38 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     plotHeightParam->setDefault(0.3);
     plotHeightParam->setDisplayRange(0.1, 0.8);
     plotHeightParam->setHint("Height of the plot overlay (normalized)");
+    plotHeightParam->setAnimates(false);
+    
+    // Line width
+    OFX::IntParamDescriptor* lineWidthParam = desc.defineIntParam("lineWidth");
+    lineWidthParam->setLabel("Line Width");
+    lineWidthParam->setDefault(2);
+    lineWidthParam->setDisplayRange(1, 10);
+    lineWidthParam->setHint("Width of the intensity curve lines in pixels");
+    lineWidthParam->setAnimates(false);
     
     // Curve colors
     OFX::RGBAParamDescriptor* redColorParam = desc.defineRGBAParam("redCurveColor");
     redColorParam->setLabel("Red Curve Color");
     redColorParam->setDefault(1.0, 0.0, 0.0, 1.0);
+    redColorParam->setAnimates(false);
     
     OFX::RGBAParamDescriptor* greenColorParam = desc.defineRGBAParam("greenCurveColor");
     greenColorParam->setLabel("Green Curve Color");
     greenColorParam->setDefault(0.0, 1.0, 0.0, 1.0);
+    greenColorParam->setAnimates(false);
     
     OFX::RGBAParamDescriptor* blueColorParam = desc.defineRGBAParam("blueCurveColor");
     blueColorParam->setLabel("Blue Curve Color");
     blueColorParam->setDefault(0.0, 0.0, 1.0, 1.0);
+    blueColorParam->setAnimates(false);
     
     // Show reference ramp
     OFX::BooleanParamDescriptor* showRampParam = desc.defineBooleanParam("showReferenceRamp");
     showRampParam->setLabel("Show Reference Ramp");
     showRampParam->setDefault(true);
     showRampParam->setHint("Display linear 0-1 grayscale ramp background");
+    showRampParam->setAnimates(false);
     
     // Set up overlay interact
     desc.setOverlayInteractDescriptor(new OFX::DefaultEffectOverlayDescriptor<IntensityProfilePlotterInteractDescriptor, IntensityProfilePlotterInteract>());
@@ -165,6 +182,7 @@ IntensityProfilePlotterPlugin::IntensityProfilePlotterPlugin(OfxImageEffectHandl
     , _dataSourceParam(nullptr)
     , _sampleCountParam(nullptr)
     , _plotHeightParam(nullptr)
+    , _lineWidthParam(nullptr)
     , _redCurveColorParam(nullptr)
     , _greenCurveColorParam(nullptr)
     , _blueCurveColorParam(nullptr)
@@ -202,6 +220,7 @@ void IntensityProfilePlotterPlugin::setupParameters()
     _dataSourceParam = fetchChoiceParam("dataSource");
     _sampleCountParam = fetchIntParam("sampleCount");
     _plotHeightParam = fetchDoubleParam("plotHeight");
+    _lineWidthParam = fetchIntParam("lineWidth");
     _redCurveColorParam = fetchRGBAParam("redCurveColor");
     _greenCurveColorParam = fetchRGBAParam("greenCurveColor");
     _blueCurveColorParam = fetchRGBAParam("blueCurveColor");
@@ -258,6 +277,8 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
     _sampleCountParam->getValueAtTime(args.time, sampleCount);
     double plotHeight;
     _plotHeightParam->getValueAtTime(args.time, plotHeight);
+    int lineWidth;
+    _lineWidthParam->getValueAtTime(args.time, lineWidth);
     
     double redColor[4], greenColor[4], blueColor[4];
     _redCurveColorParam->getValueAtTime(args.time, redColor[0], redColor[1], redColor[2], redColor[3]);
@@ -341,56 +362,88 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
             int py1_r = static_cast<int>(redSamples[i] * plotHeightPx);
             int py2_r = static_cast<int>(redSamples[i + 1] * plotHeightPx);
             drawLine(dstData, dstWidth, dstHeight, nComponents, rowBytes,
-                     px1, py1_r, px2, py2_r, redColor[0], redColor[1], redColor[2]);
+                     px1, py1_r, px2, py2_r, redColor[0], redColor[1], redColor[2], lineWidth);
             
             // Draw green curve
             int py1_g = static_cast<int>(greenSamples[i] * plotHeightPx);
             int py2_g = static_cast<int>(greenSamples[i + 1] * plotHeightPx);
             drawLine(dstData, dstWidth, dstHeight, nComponents, rowBytes,
-                     px1, py1_g, px2, py2_g, greenColor[0], greenColor[1], greenColor[2]);
+                     px1, py1_g, px2, py2_g, greenColor[0], greenColor[1], greenColor[2], lineWidth);
             
             // Draw blue curve
             int py1_b = static_cast<int>(blueSamples[i] * plotHeightPx);
             int py2_b = static_cast<int>(blueSamples[i + 1] * plotHeightPx);
             drawLine(dstData, dstWidth, dstHeight, nComponents, rowBytes,
-                     px1, py1_b, px2, py2_b, blueColor[0], blueColor[1], blueColor[2]);
+                     px1, py1_b, px2, py2_b, blueColor[0], blueColor[1], blueColor[2], lineWidth);
         }
     }
 }
 
 void IntensityProfilePlotterPlugin::drawLine(float* buffer, int width, int height, int nComp, int rowBytes,
                                               int x1, int y1, int x2, int y2, 
-                                              float r, float g, float b)
+                                              float r, float g, float b, int lineWidth)
 {
-    // Simple Bresenham line drawing
-    int dx = abs(x2 - x1);
-    int dy = abs(y2 - y1);
-    int sx = (x1 < x2) ? 1 : -1;
-    int sy = (y1 < y2) ? 1 : -1;
-    int err = dx - dy;
-    
-    int x = x1, y = y1;
-    
-    while (true) {
-        // Set pixel if in bounds
-        if (x >= 0 && x < width && y >= 0 && y < height) {
-            int offset = (y * width + x) * nComp;
+    // Helper function to set a pixel
+    auto setPixel = [&](int px, int py) {
+        if (px >= 0 && px < width && py >= 0 && py < height) {
+            int offset = (py * width + px) * nComp;
             buffer[offset + 0] = r;
             buffer[offset + 1] = g;
             buffer[offset + 2] = b;
             if (nComp == 4) buffer[offset + 3] = 1.0f;
         }
-        
-        if (x == x2 && y == y2) break;
-        
-        int e2 = 2 * err;
-        if (e2 > -dy) {
-            err -= dy;
-            x += sx;
+    };
+    
+    // Calculate line angle for perpendicular offset
+    int dx = x2 - x1;
+    int dy = y2 - y1;
+    float length = sqrtf(static_cast<float>(dx * dx + dy * dy));
+    if (length < 0.001f) {
+        // Degenerate line, just draw a point with width
+        int halfWidth = lineWidth / 2;
+        for (int wy = -halfWidth; wy <= halfWidth; ++wy) {
+            for (int wx = -halfWidth; wx <= halfWidth; ++wx) {
+                setPixel(x1 + wx, y1 + wy);
+            }
         }
-        if (e2 < dx) {
-            err += dx;
-            y += sy;
+        return;
+    }
+    
+    // Normalized perpendicular vector
+    float perpX = -dy / length;
+    float perpY = dx / length;
+    
+    // Draw multiple parallel lines to create thickness
+    int halfWidth = lineWidth / 2;
+    for (int w = -halfWidth; w <= halfWidth; ++w) {
+        int offsetX1 = static_cast<int>(x1 + perpX * w);
+        int offsetY1 = static_cast<int>(y1 + perpY * w);
+        int offsetX2 = static_cast<int>(x2 + perpX * w);
+        int offsetY2 = static_cast<int>(y2 + perpY * w);
+        
+        // Bresenham line drawing for this parallel line
+        int adx = abs(offsetX2 - offsetX1);
+        int ady = abs(offsetY2 - offsetY1);
+        int sx = (offsetX1 < offsetX2) ? 1 : -1;
+        int sy = (offsetY1 < offsetY2) ? 1 : -1;
+        int err = adx - ady;
+        
+        int x = offsetX1, y = offsetY1;
+        
+        while (true) {
+            setPixel(x, y);
+            
+            if (x == offsetX2 && y == offsetY2) break;
+            
+            int e2 = 2 * err;
+            if (e2 > -ady) {
+                err -= ady;
+                x += sx;
+            }
+            if (e2 < adx) {
+                err += adx;
+                y += sy;
+            }
         }
     }
 }

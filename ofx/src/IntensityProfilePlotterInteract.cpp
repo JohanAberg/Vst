@@ -236,9 +236,9 @@ bool IntensityProfilePlotterInteract::penMotion(const OFX::PenArgs& args)
     
     // Update parameter
     if (_dragState == kDragPoint1) {
-        _instance->getPoint1Param()->setValueAtTime(args.time, nx, ny);
+        _instance->getPoint1Param()->setValue(nx, ny);
     } else if (_dragState == kDragPoint2) {
-        _instance->getPoint2Param()->setValueAtTime(args.time, nx, ny);
+        _instance->getPoint2Param()->setValue(nx, ny);
     } else if (_dragState == kDragLine) {
         // Get current point positions
         double point1[2], point2[2];
@@ -266,8 +266,8 @@ bool IntensityProfilePlotterInteract::penMotion(const OFX::PenArgs& args)
         newP2Y = std::max(0.0, std::min(1.0, newP2Y));
         
         // Update both parameters
-        _instance->getPoint1Param()->setValueAtTime(args.time, newP1X, newP1Y);
-        _instance->getPoint2Param()->setValueAtTime(args.time, newP2X, newP2Y);
+        _instance->getPoint1Param()->setValue(newP1X, newP1Y);
+        _instance->getPoint2Param()->setValue(newP2X, newP2Y);
         
         // Update last mouse position
         _lastMouseX = args.penPosition.x;
