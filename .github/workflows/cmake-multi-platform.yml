@@ -55,11 +55,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev
+
     - name: Download OpenFX SDK
       # Download OpenFX SDK from GitHub
       shell: bash
       run: |
-        OFX_SDK_DIR="${{ github.workspace }}/plugin/ofx-sdk"
+        OFX_SDK_DIR="${{ github.workspace }}/ofx-sdk"
         mkdir -p "$OFX_SDK_DIR"
         
         # Use platform-agnostic temp directory
@@ -103,6 +109,13 @@ jobs:
           exit 1
         fi
         
+        # Copy Support directory (required for OFX plugin builds)
+        if [ -d "$TEMP_DIR/openfx/Support" ]; then
+          cp -r "$TEMP_DIR/openfx/Support" "$OFX_SDK_DIR/"
+        else
+          echo "Warning: Support directory not found in OpenFX SDK"
+        fi
+        
         # Copy lib directory if it exists (optional)
         [ -d "$TEMP_DIR/openfx/lib" ] && cp -r "$TEMP_DIR/openfx/lib" "$OFX_SDK_DIR/" || true
         [ -d "$TEMP_DIR/openfx/Lib" ] && cp -r "$TEMP_DIR/openfx/Lib" "$OFX_SDK_DIR/lib" || true
@@ -120,9 +133,9 @@ jobs:
       id: strings
       shell: bash
       run: |
-        echo "build-output-dir=${{ github.workspace }}/plugin/build" >> "$GITHUB_OUTPUT"
-        echo "plugin-dir=${{ github.workspace }}/plugin" >> "$GITHUB_OUTPUT"
-        echo "ofx-sdk-dir=${{ github.workspace }}/plugin/ofx-sdk" >> "$GITHUB_OUTPUT"
+        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+        echo "source-dir=${{ github.workspace }}" >> "$GITHUB_OUTPUT"
+        echo "ofx-sdk-dir=${{ github.workspace }}/ofx-sdk" >> "$GITHUB_OUTPUT"
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
@@ -130,7 +143,7 @@ jobs:
       shell: bash
       run: |
         BUILD_DIR="${{ steps.strings.outputs.build-output-dir }}"
-        PLUGIN_DIR="${{ steps.strings.outputs.plugin-dir }}"
+        SOURCE_DIR="${{ steps.strings.outputs.source-dir }}"
         OFX_SDK_DIR="${{ steps.strings.outputs.ofx-sdk-dir }}"
         
         # Windows uses multi-config generators, so CMAKE_BUILD_TYPE is not used
@@ -139,14 +152,14 @@ jobs:
             -DCMAKE_CXX_COMPILER="${{ matrix.cpp_compiler }}" \
             -DCMAKE_C_COMPILER="${{ matrix.c_compiler }}" \
             -DOFX_SDK_PATH="$OFX_SDK_DIR" \
-            -S "$PLUGIN_DIR"
+            -S "$SOURCE_DIR"
         else
           cmake -B "$BUILD_DIR" \
             -DCMAKE_CXX_COMPILER="${{ matrix.cpp_compiler }}" \
             -DCMAKE_C_COMPILER="${{ matrix.c_compiler }}" \
             -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
             -DOFX_SDK_PATH="$OFX_SDK_DIR" \
-            -S "$PLUGIN_DIR"
+            -S "$SOURCE_DIR"
         fi
 
     - name: Build
