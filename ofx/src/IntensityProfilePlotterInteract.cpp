@@ -14,6 +14,8 @@ IntensityProfilePlotterInteract::IntensityProfilePlotterInteract(OfxInteractHand
     , _dragState(kDragNone)
     , _instance(nullptr)
     , _lineDragOffset(0.0)
+    , _lastMouseX(0.0)
+    , _lastMouseY(0.0)
 {
     // Get the effect instance from the parameter
     if (effect) {
@@ -207,6 +209,8 @@ bool IntensityProfilePlotterInteract::penDown(const OFX::PenArgs& args)
     if (hitTestLine(args.penPosition.x, args.penPosition.y, px1, py1, px2, py2, pixelScale, t)) {
         _dragState = kDragLine;
         _lineDragOffset = t; // Store position along the line
+        _lastMouseX = args.penPosition.x;
+        _lastMouseY = args.penPosition.y;
         return true;
     }
     
@@ -241,57 +245,33 @@ bool IntensityProfilePlotterInteract::penMotion(const OFX::PenArgs& args)
         _instance->getPoint1Param()->getValueAtTime(args.time, point1[0], point1[1]);
         _instance->getPoint2Param()->getValueAtTime(args.time, point2[0], point2[1]);
         
-        // Convert current points to pixel space
-        double px1 = point1[0] * 1920.0;
-        double py1 = point1[1] * 1080.0;
-        double px2 = point2[0] * 1920.0;
-        double py2 = point2[1] * 1080.0;
+        // Calculate mouse delta from last position
+        double deltaX = args.penPosition.x - _lastMouseX;
+        double deltaY = args.penPosition.y - _lastMouseY;
         
-        // Direction vector of the line
-        double dx = px2 - px1;
-        double dy = py2 - py1;
-        double lineLen = std::sqrt(dx * dx + dy * dy);
+        // Convert delta to normalized coordinates
+        double deltaNormX = deltaX / 1920.0;
+        double deltaNormY = deltaY / 1080.0;
         
-        if (lineLen > 1e-6) {
-            // Normalize direction
-            dx /= lineLen;
-            dy /= lineLen;
-            
-            // Project cursor position onto the line's direction
-            double mouseX = args.penPosition.x;
-            double mouseY = args.penPosition.y;
-            
-            // Vector from P1 to mouse
-            double mouseRelX = mouseX - px1;
-            double mouseRelY = mouseY - py1;
-            
-            // Project onto line direction to get the offset
-            double projection = mouseRelX * dx + mouseRelY * dy;
-            
-            // Calculate the new center point along the line
-            double newCenterX = px1 + projection * dx;
-            double newCenterY = py1 + projection * dy;
-            
-            // The offset from initial P1
-            double offsetX = newCenterX - px1;
-            double offsetY = newCenterY - py1;
-            
-            // Move both points by this offset
-            double newP1X = point1[0] + (offsetX / 1920.0);
-            double newP1Y = point1[1] + (offsetY / 1080.0);
-            double newP2X = point2[0] + (offsetX / 1920.0);
-            double newP2Y = point2[1] + (offsetY / 1080.0);
-            
-            // Clamp to [0, 1]
-            newP1X = std::max(0.0, std::min(1.0, newP1X));
-            newP1Y = std::max(0.0, std::min(1.0, newP1Y));
-            newP2X = std::max(0.0, std::min(1.0, newP2X));
-            newP2Y = std::max(0.0, std::min(1.0, newP2Y));
-            
-            // Update both parameters
-            _instance->getPoint1Param()->setValueAtTime(args.time, newP1X, newP1Y);
-            _instance->getPoint2Param()->setValueAtTime(args.time, newP2X, newP2Y);
-        }
+        // Move both points by the delta
+        double newP1X = point1[0] + deltaNormX;
+        double newP1Y = point1[1] + deltaNormY;
+        double newP2X = point2[0] + deltaNormX;
+        double newP2Y = point2[1] + deltaNormY;
+        
+        // Clamp to [0, 1]
+        newP1X = std::max(0.0, std::min(1.0, newP1X));
+        newP1Y = std::max(0.0, std::min(1.0, newP1Y));
+        newP2X = std::max(0.0, std::min(1.0, newP2X));
+        newP2Y = std::max(0.0, std::min(1.0, newP2Y));
+        
+        // Update both parameters
+        _instance->getPoint1Param()->setValueAtTime(args.time, newP1X, newP1Y);
+        _instance->getPoint2Param()->setValueAtTime(args.time, newP2X, newP2Y);
+        
+        // Update last mouse position
+        _lastMouseX = args.penPosition.x;
+        _lastMouseY = args.penPosition.y;
     }
     
     return true;

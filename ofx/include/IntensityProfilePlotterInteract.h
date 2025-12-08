@@ -36,6 +36,7 @@ private:
     DragState _dragState;
     IntensityProfilePlotterPlugin* _instance;
     double _lineDragOffset;
+    double _lastMouseX, _lastMouseY; // Track last mouse position for delta calculation
     
     // Hit testing
     bool hitTestPoint(double x, double y, double px, double py, double pixelScale);
