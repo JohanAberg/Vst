@@ -55,6 +55,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev
+
     - name: Download OpenFX SDK
       # Download OpenFX SDK from GitHub
       shell: bash
