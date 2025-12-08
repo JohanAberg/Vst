@@ -4,6 +4,16 @@ project(PluginCollection VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Define DEVELOPMENT for VST3 SDK for all configurations
+if(NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_definitions(DEVELOPMENT)
+else()
+    add_compile_definitions(RELEASE)
+endif()
+
+# Suppress warnings-as-errors for external dependencies
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=unused-but-set-variable")
+
 # Build options for each plugin
 option(BUILD_OFX_PLUGIN "Build the Intensity Profile Plotter OFX plugin" ON)
 option(BUILD_OFX_MINIMAL "Build the minimal test OFX plugin" ON)
