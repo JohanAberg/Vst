@@ -29,14 +29,17 @@ private:
     enum DragState {
         kDragNone,
         kDragPoint1,
-        kDragPoint2
+        kDragPoint2,
+        kDragLine
     };
     
     DragState _dragState;
     IntensityProfilePlotterPlugin* _instance;
+    double _lineDragOffset;
     
     // Hit testing
     bool hitTestPoint(double x, double y, double px, double py, double pixelScale);
+    bool hitTestLine(double x, double y, double px1, double py1, double px2, double py2, double pixelScale, double& t);
     void drawPoint(const OFX::DrawArgs& args, double x, double y, bool selected);
     void drawLine(const OFX::DrawArgs& args, double x1, double y1, double x2, double y2);
     
