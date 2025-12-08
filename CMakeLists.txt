@@ -6,11 +6,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Build options for each plugin
 option(BUILD_OFX_PLUGIN "Build the Intensity Profile Plotter OFX plugin" ON)
+option(BUILD_OFX_MINIMAL "Build the minimal test OFX plugin" ON)
 option(BUILD_VST3_CIRCUIT_SATURATION "Build the Analog Circuit Saturation VST3 plugin" ON)
 option(BUILD_VST3_ANALOG_SATURATION "Build the Analog Saturation VST3 plugin (JUCE-based)" ON)
 
 # OFX SDK path (can be set from command line: -DOFX_SDK_PATH=/path/to/ofx-sdk)
-set(OFX_SDK_PATH "${CMAKE_CURRENT_SOURCE_DIR}/ofx-sdk" CACHE PATH "Path to OpenFX SDK")
+set(OFX_SDK_PATH "C:/Users/aberg/Documents/openfx" CACHE PATH "Path to OpenFX SDK")
 
 # OFX Plugin
 if(BUILD_OFX_PLUGIN)
