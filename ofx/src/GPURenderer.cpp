@@ -121,21 +121,38 @@ bool GPURenderer::sampleMetal(
             return false;
         }
         
-        // Load Metal library (embedded in bundle)
-        NSBundle* bundle = [NSBundle bundleForClass:[NSObject class]];
-        NSURL* libraryURL = [bundle URLForResource:@"intensitySampler" withExtension:@"metallib"];
+        // Load Metal library from OFX plugin bundle
+        // OFX plugins are bundles, so we need to get the Resources folder
+        NSString* executablePath = [[NSProcessInfo processInfo] arguments][0];
+        NSString* bundlePath = [[executablePath stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
+        NSString* resourcesPath = [bundlePath stringByAppendingPathComponent:@"Resources"];
+        NSString* libraryPath = [resourcesPath stringByAppendingPathComponent:@"intensitySampler.metallib"];
         
-        if (!libraryURL) {
-            // Try loading from default location
-            NSString* resourcePath = [[NSBundle mainBundle] resourcePath];
-            libraryURL = [NSURL fileURLWithPath:[resourcePath stringByAppendingPathComponent:@"intensitySampler.metallib"]];
-        }
+        NSURL* libraryURL = [NSURL fileURLWithPath:libraryPath];
         
         NSError* error = nil;
-        id<MTLLibrary> library = [device newLibraryWithURL:libraryURL error:&error];
+        id<MTLLibrary> library = nil;
         
-        if (!library || error) {
-            // Fallback: try to compile from source (for development)
+        // Try loading from Resources folder
+        if ([[NSFileManager defaultManager] fileExistsAtPath:libraryPath]) {
+            library = [device newLibraryWithURL:libraryURL error:&error];
+        }
+        
+        // If that fails, try main bundle (for development/testing)
+        if (!library) {
+            NSBundle* mainBundle = [NSBundle mainBundle];
+            libraryURL = [mainBundle URLForResource:@"intensitySampler" withExtension:@"metallib"];
+            if (libraryURL) {
+                library = [device newLibraryWithURL:libraryURL error:&error];
+            }
+        }
+        
+        // Last resort: try to use default library
+        if (!library) {
+            library = [device newDefaultLibrary];
+        }
+        
+        if (!library) {
             return false;
         }
         
