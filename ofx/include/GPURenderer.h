@@ -138,15 +138,6 @@ private:
     // Optimization #4: Async GPU queue support (CRITICAL for responsiveness)
     cl_command_queue _hostOpenCLQueue = nullptr;  // Host-provided queue (we don't own)
     bool _ownsOpenCLQueue = true;  // Track if we created the queue
-    
-    /**
-     * Set a host-provided OpenCL command queue.
-     * When host provides its queue, plugin enqueues work and returns immediately.
-     * Host manages GPU synchronization for better responsiveness.
-     * 
-     * @param hostQueue OpenCL command queue from host (don't release in plugin)
-     */
-    void setHostOpenCLQueue(cl_command_queue hostQueue);
 #endif
 };
 

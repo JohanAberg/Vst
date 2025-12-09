@@ -32,21 +32,14 @@ elseif(UNIX)
     set(PLATFORM_LINUX ON)
 endif()
 
-# OpenCL support (optional GPU acceleration)
+# OpenCL support (optional GPU acceleration) - DISABLED ON WINDOWS (no proper ICD available)
 set(HAVE_OPENCL OFF)
 
-# Set default OpenCL SDK path for Windows (SYCL SDK location)
-if(WIN32 AND NOT DEFINED OpenCL_INCLUDE_DIR)
-    set(OPENCL_SDK_PATH "C:/Users/aberg/Documents/OpenCL-Setup/sycl_windows")
-    if(EXISTS "${OPENCL_SDK_PATH}/include/CL/cl.h" AND EXISTS "${OPENCL_SDK_PATH}/lib/ur_loader.lib")
-        set(OpenCL_INCLUDE_DIR "${OPENCL_SDK_PATH}/include" CACHE PATH "OpenCL include directory")
-        set(OpenCL_LIBRARY "${OPENCL_SDK_PATH}/lib/ur_loader.lib" CACHE FILEPATH "OpenCL library")
-        message(STATUS "✓ Using local SYCL/OpenCL SDK: ${OPENCL_SDK_PATH}")
-    endif()
-endif()
+# Note: OpenCL on Windows requires GPU vendor ICD (NVIDIA CUDA, AMD ROCm, Intel SDK)
+# Without proper runtime, link will fail. Use CPU rendering for now.
 
-# Try to find OpenCL
-find_package(OpenCL QUIET)
+# Try to find OpenCL (disabled for now on Windows)
+# find_package(OpenCL QUIET)
 
 if(OpenCL_FOUND)
     set(HAVE_OPENCL ON)
@@ -221,6 +214,10 @@ elseif(PLATFORM_LINUX)
 endif()
 
 # Compiler-specific options
+if(HAVE_OPENCL)
+    target_compile_definitions(IntensityProfilePlotter PRIVATE HAVE_OPENCL)
+endif()
+
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(IntensityProfilePlotter PRIVATE
         -Wall
