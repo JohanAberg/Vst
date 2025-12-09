@@ -5,7 +5,19 @@
 
 #include <cmath>
 #include <algorithm>
+
+#ifdef _WIN32
+#define NOMINMAX  // Prevent windows.h from defining min/max macros
+#include <windows.h>
+#include <GL/gl.h>
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+#elif defined(__APPLE__)
 #include <OpenGL/gl.h>
+#else
+#include <GL/gl.h>
+#endif
 
 static const double POINT_HIT_RADIUS = 15.0; // pixels
 static const double POINT_DISPLAY_RADIUS = 10.0; // pixels

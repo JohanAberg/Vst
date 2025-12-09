@@ -171,6 +171,11 @@ elseif(PLATFORM_WINDOWS)
         SUFFIX ".ofx"
     )
     
+    target_link_libraries(IntensityProfilePlotter
+        OfxSupport
+        opengl32
+    )
+    
     if(HAVE_OPENCL)
         target_link_libraries(IntensityProfilePlotter ${OpenCL_LIBRARIES})
         target_include_directories(IntensityProfilePlotter PRIVATE ${OpenCL_INCLUDE_DIRS})
@@ -181,6 +186,11 @@ elseif(PLATFORM_LINUX)
     set_target_properties(IntensityProfilePlotter PROPERTIES
         PREFIX ""
         SUFFIX ".ofx"
+    )
+    
+    target_link_libraries(IntensityProfilePlotter
+        OfxSupport
+        GL
     )
     
     if(HAVE_OPENCL)
