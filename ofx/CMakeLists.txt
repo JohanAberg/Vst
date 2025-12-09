@@ -79,7 +79,7 @@ if(PLATFORM_MACOS)
     if(XCRUN_EXECUTABLE)
         # Check if Metal toolchain is actually available by testing execution
         execute_process(
-            COMMAND ${XCRUN_EXECUTABLE} -sdk macosx metal -version
+            COMMAND ${XCRUN_EXECUTABLE} -sdk macosx metal --version
             OUTPUT_VARIABLE METAL_VERSION_OUTPUT
             ERROR_VARIABLE METAL_VERSION_ERROR
             OUTPUT_STRIP_TRAILING_WHITESPACE

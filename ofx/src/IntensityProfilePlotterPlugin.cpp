@@ -43,9 +43,10 @@ void IntensityProfilePlotterPluginFactory::describe(OFX::ImageEffectDescriptor& 
     // Set render thread safety
     desc.setRenderThreadSafety(OFX::eRenderInstanceSafe);
     
-#ifdef __APPLE__
-    desc.setSupportsMetalRender(true);
-#endif
+    // Disable Metal to avoid GPU resource issues
+    // #ifdef __APPLE__
+    //     desc.setSupportsMetalRender(true);
+    // #endif
     
     // Standard flags
     desc.setSingleInstance(false);
@@ -205,22 +206,8 @@ void getPluginIDs(OFX::PluginFactoryArray &ids)
 IntensityProfilePlotterPlugin::IntensityProfilePlotterPlugin(OfxImageEffectHandle handle)
     : OFX::ImageEffect(handle)
 {
-    // DO NOT call setupClips() or setupParameters() in constructor
-    // OFX framework doesn't allow fetching clips/parameters during construction
-    // They will be fetched on-demand during render
-    
-    // Initialize components with exception handling
-    try {
-        // _sampler = std::make_unique<IntensitySampler>();
-        // _plotter = std::make_unique<ProfilePlotter>();
-    } catch (...) {
-        // If initialization fails, leave them null
-        _sampler = nullptr;
-        _plotter = nullptr;
-    }
-    
-    // Create interact (will be created by descriptor when needed)
-    // _interact = new IntensityProfilePlotterInteract(getOfxImageEffectHandle(), this);
+    // DO NOT call setupClips() or setupParameters() in constructor per OFX spec
+    // They will be fetched lazily on-demand
 }
 
 IntensityProfilePlotterPlugin::~IntensityProfilePlotterPlugin()
@@ -285,9 +272,29 @@ bool IntensityProfilePlotterPlugin::getRegionOfDefinition(const OFX::RegionOfDef
 
 void IntensityProfilePlotterPlugin::getClipPreferences(OFX::ClipPreferencesSetter& clipPreferences)
 {
+    // This is called on the main thread in a safe context
+    // Initialize clips and parameters here to avoid thread safety issues in render()
+    {
+        std::lock_guard<std::mutex> lock(_initMutex);
+        if (!_clipsInitialized) {
+            try {
+                setupClips();
+                _clipsInitialized = true;
+            } catch (...) {
+                // Continue even if clips fail to initialize
+            }
+        }
+        if (!_paramsInitialized) {
+            try {
+                setupParameters();
+                _paramsInitialized = true;
+            } catch (...) {
+                // Continue even if params fail to initialize
+            }
+        }
+    }
+    
     // Output matches input - use default behavior
-    // clipPreferences.setOutputFrameVarying(_srcClip->getFrameVarying());
-    // clipPreferences.setOutputHasContinousSamples(_srcClip->hasContinuousSamples());
 }
 
 bool IntensityProfilePlotterPlugin::isIdentity(const OFX::IsIdentityArguments& args, 
@@ -299,41 +306,47 @@ bool IntensityProfilePlotterPlugin::isIdentity(const OFX::IsIdentityArguments& a
 
 void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
 {
-    // Copy source to destination so the host sees the unmodified clip
-    // We keep the overlay rendering in the interact only.
-    if (!_srcClip || !_dstClip) {
-        setupClips();
-    }
-
+    // Minimalist passthrough - copy pixels with no GPU operations
     if (!_srcClip || !_dstClip) {
         return;
     }
 
-    std::unique_ptr<OFX::Image> src(_srcClip->fetchImage(args.time));
-    std::unique_ptr<OFX::Image> dst(_dstClip->fetchImage(args.time));
-    if (!src || !dst) {
-        return;
-    }
-
-    const OfxRectI& rw = args.renderWindow;
-    int comps = 0;
-    switch (dst->getPixelComponents()) {
-    case OFX::ePixelComponentRGBA: comps = 4; break;
-    case OFX::ePixelComponentRGB:  comps = 3; break;
-    case OFX::ePixelComponentAlpha: comps = 1; break;
-    default: return; // unsupported
-    }
-
-    // We declared float-only in describeInContext, so assume float pixels
-    const size_t bytesPerPixel = comps * sizeof(float);
-    const int width = rw.x2 - rw.x1;
-
-    for (int y = rw.y1; y < rw.y2; ++y) {
-        const float* s = reinterpret_cast<const float*>(src->getPixelAddress(rw.x1, y));
-        float* d = reinterpret_cast<float*>(dst->getPixelAddress(rw.x1, y));
-        if (!s || !d) {
-            continue;
+    try {
+        OFX::Image* src = _srcClip->fetchImage(args.time);
+        OFX::Image* dst = _dstClip->fetchImage(args.time);
+        
+        if (!src || !dst) {
+            return;
         }
-        std::memcpy(d, s, static_cast<size_t>(width) * bytesPerPixel);
+
+        const OfxRectI& rw = args.renderWindow;
+        int width = rw.x2 - rw.x1;
+        int height = rw.y2 - rw.y1;
+        
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+
+        int comps = 0;
+        switch (dst->getPixelComponents()) {
+        case OFX::ePixelComponentRGBA: comps = 4; break;
+        case OFX::ePixelComponentRGB:  comps = 3; break;
+        case OFX::ePixelComponentAlpha: comps = 1; break;
+        default: return;
+        }
+
+        const size_t bytesPerPixel = comps * sizeof(float);
+
+        // Copy pixels - absolute minimum implementation
+        for (int y = 0; y < height; ++y) {
+            const void* srcPtr = src->getPixelAddress(rw.x1, rw.y1 + y);
+            void* dstPtr = dst->getPixelAddress(rw.x1, rw.y1 + y);
+            
+            if (srcPtr && dstPtr) {
+                std::memcpy(dstPtr, srcPtr, (size_t)width * bytesPerPixel);
+            }
+        }
+    } catch (...) {
+        // Silent catch - prevent any crashes
     }
 }
