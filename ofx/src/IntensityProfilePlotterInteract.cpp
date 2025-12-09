@@ -246,17 +246,17 @@ void IntensityProfilePlotterInteract::drawPlot(const OFX::DrawArgs& args, OFX::I
 
     int sampleCount = 256;
     OFX::IntParam* sampleCountParam = _instance->getSampleCountParam();
-    if (sampleCountParam) sampleCountParam->getValue(sampleCount);
+    if (sampleCountParam) sampleCountParam->getValueAtTime(args.time, sampleCount);
     sampleCount = std::max(8, std::min(2048, sampleCount));
 
     double whitePoint = 1.0;
     OFX::DoubleParam* whitePointParam = _instance->getWhitePointParam();
-    if (whitePointParam) whitePointParam->getValue(whitePoint);
+    if (whitePointParam) whitePointParam->getValueAtTime(args.time, whitePoint);
     if (whitePoint <= 0.0) whitePoint = 1.0;
 
     int lineWidth = 2;
     OFX::IntParam* lineWidthParam = _instance->getLineWidthParam();
-    if (lineWidthParam) lineWidthParam->getValue(lineWidth);
+    if (lineWidthParam) lineWidthParam->getValueAtTime(args.time, lineWidth);
     lineWidth = std::max(1, std::min(20, lineWidth));
 
     // Fetch curve colors
@@ -266,9 +266,9 @@ void IntensityProfilePlotterInteract::drawPlot(const OFX::DrawArgs& args, OFX::I
     OFX::RGBAParam* redParam = _instance->getRedCurveColorParam();
     OFX::RGBAParam* greenParam = _instance->getGreenCurveColorParam();
     OFX::RGBAParam* blueParam = _instance->getBlueCurveColorParam();
-    if (redParam) redParam->getValue(redColor[0], redColor[1], redColor[2], redColor[3]);
-    if (greenParam) greenParam->getValue(greenColor[0], greenColor[1], greenColor[2], greenColor[3]);
-    if (blueParam) blueParam->getValue(blueColor[0], blueColor[1], blueColor[2], blueColor[3]);
+    if (redParam) redParam->getValueAtTime(args.time, redColor[0], redColor[1], redColor[2], redColor[3]);
+    if (greenParam) greenParam->getValueAtTime(args.time, greenColor[0], greenColor[1], greenColor[2], greenColor[3]);
+    if (blueParam) blueParam->getValueAtTime(args.time, blueColor[0], blueColor[1], blueColor[2], blueColor[3]);
 
     // Plot rect (normalized to image, map to pixels using image dims)
     double rectPos[2] = {0.05, 0.05};
