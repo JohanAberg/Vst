@@ -1,0 +1,18 @@
+Restoring the image cache...
+Loading plugin cache...
+Info: init.py script not loaded (this is not an error)
+Loading PyPlugs...
+Traceback (most recent call last):
+  File "C:\Users\aberg\Documents\Vst\natron_benchmark_gpu_cpu.py", line 84, in createInstance
+    plotter.setScriptName("Plotter")
+AttributeError: 'NoneType' object has no attribute 'setScriptName'
+ERROR: Natron: WriteNode does not belong to the project file. Please enter a valid Write node script-name.
+
+======================================================================
+Natron Benchmark: IntensityProfilePlotter GPU vs CPU
+======================================================================
+Test configurations: 10
+
+[OK] Created Ramp source
+[OK] Created IntensityProfilePlotter (fr.inria.openfx)
+[ERROR] 'NoneType' object has no attribute 'setScriptName'

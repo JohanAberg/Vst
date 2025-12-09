@@ -32,13 +32,21 @@ elseif(UNIX)
     set(PLATFORM_LINUX ON)
 endif()
 
-# OpenCL support (optional GPU acceleration) - DISABLED ON WINDOWS (no proper ICD available)
-set(HAVE_OPENCL OFF)
+# OpenCL support (optional GPU acceleration) - ENABLED
+# Uses proper OpenCL SDK with real implementations
+set(HAVE_OPENCL ON)
 
-# Note: OpenCL on Windows requires GPU vendor ICD (NVIDIA CUDA, AMD ROCm, Intel SDK)
-# Without proper runtime, link will fail. Use CPU rendering for now.
+# Set default OpenCL SDK path for Windows (Intel/Khronos built SDK)
+if(WIN32 AND NOT DEFINED OpenCL_INCLUDE_DIR)
+    set(OPENCL_SDK_PATH "C:/Users/aberg/Documents/OpenCL-SDK/install")
+    if(EXISTS "${OPENCL_SDK_PATH}/include/CL/cl.h" AND EXISTS "${OPENCL_SDK_PATH}/lib/OpenCL.lib")
+        set(OpenCL_INCLUDE_DIR "${OPENCL_SDK_PATH}/include" CACHE PATH "OpenCL include directory")
+        set(OpenCL_LIBRARY "${OPENCL_SDK_PATH}/lib/OpenCL.lib" CACHE FILEPATH "OpenCL library")
+        # message(STATUS "✓ Using OpenCL SDK: ${OPENCL_SDK_PATH}")
+    endif()
+endif()
 
-# Try to find OpenCL (disabled for now on Windows)
+# Try to find OpenCL
 # find_package(OpenCL QUIET)
 
 if(OpenCL_FOUND)

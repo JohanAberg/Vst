@@ -319,6 +319,10 @@ bool GPURenderer::sampleMetal(
 }
 
 #ifdef HAVE_OPENCL
+
+// Diagnostic: Verify HAVE_OPENCL is defined
+static void __diag_opencl_helpers_are_compiling() { }
+
 // Optimization #1: Kernel Compilation Caching
 // Avoids recompiling OpenCL kernel on every frame
 cl_program GPURenderer::getCachedOrCompileProgram(cl_context context, cl_device_id device)

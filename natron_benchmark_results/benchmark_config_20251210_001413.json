@@ -1,0 +1,96 @@
+{
+  "timestamp": "20251210_001413",
+  "test_count": 10,
+  "configurations": [
+    {
+      "frame": 1,
+      "res": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "samples": 256,
+      "gpu": false,
+      "desc": "1080p-256-CPU"
+    },
+    {
+      "frame": 2,
+      "res": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "samples": 256,
+      "gpu": true,
+      "desc": "1080p-256-GPU"
+    },
+    {
+      "frame": 3,
+      "res": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "samples": 1024,
+      "gpu": false,
+      "desc": "1080p-1024-CPU"
+    },
+    {
+      "frame": 4,
+      "res": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "samples": 1024,
+      "gpu": true,
+      "desc": "1080p-1024-GPU"
+    },
+    {
+      "frame": 5,
+      "res": "4K",
+      "width": 3840,
+      "height": 2160,
+      "samples": 256,
+      "gpu": false,
+      "desc": "4K-256-CPU"
+    },
+    {
+      "frame": 6,
+      "res": "4K",
+      "width": 3840,
+      "height": 2160,
+      "samples": 256,
+      "gpu": true,
+      "desc": "4K-256-GPU"
+    },
+    {
+      "frame": 7,
+      "res": "4K",
+      "width": 3840,
+      "height": 2160,
+      "samples": 1024,
+      "gpu": false,
+      "desc": "4K-1024-CPU"
+    },
+    {
+      "frame": 8,
+      "res": "4K",
+      "width": 3840,
+      "height": 2160,
+      "samples": 1024,
+      "gpu": true,
+      "desc": "4K-1024-GPU"
+    },
+    {
+      "frame": 9,
+      "res": "4K",
+      "width": 3840,
+      "height": 2160,
+      "samples": 4096,
+      "gpu": false,
+      "desc": "4K-4096-CPU"
+    },
+    {
+      "frame": 10,
+      "res": "4K",
+      "width": 3840,
+      "height": 2160,
+      "samples": 4096,
+      "gpu": true,
+      "desc": "4K-4096-GPU"
+    }
+  ]
+}

@@ -416,7 +416,6 @@ void IntensityProfilePlotterInteract::drawText(double x, double y, const char* t
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
     double charWidth = 6.0 * scale;  // 5 pixels + 1 pixel spacing
-    double charHeight = 8.0 * scale; // 7 pixels + 1 pixel spacing
     double pixelSize = scale;
     
     double cursorX = x;

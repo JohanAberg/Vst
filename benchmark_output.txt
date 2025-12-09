@@ -1,0 +1,23 @@
+Restoring the image cache...
+Loading plugin cache...
+Info: init.py script not loaded (this is not an error)
+Loading PyPlugs...
+WriteNode ==> Rendering started
+WriteNode ==> Frame: 1, Progress: 16.7%, 0.8 Fps, Time Remaining: 6 seconds
+WriteNode ==> Frame: 3, Progress: 33.3%, 0.7 Fps, Time Remaining: 5 seconds
+WriteNode ==> Frame: 2, Progress: 50.0%, 1.0 Fps, Time Remaining: 2 seconds
+WriteNode ==> Frame: 5, Progress: 66.7%, 0.9 Fps, Time Remaining: 2 seconds
+WriteNode ==> Frame: 4, Progress: 83.3%, 1.1 Fps, Time Remaining: 0 second 
+WriteNode ==> Frame: 6, Progress: 100.0%, 1.3 Fps, Time Remaining: 0 second
+WriteNode ==> Rendering finished
+
+======================================================================
+Natron Benchmark - Node Graph Setup
+======================================================================
+[OK] Created Ramp node
+[OK] Created Write node: WriteNode
+[OK] Output: C:\Users\aberg\Documents\Vst\natron_benchmark_results\timed_####.png
+[OK] Connected Ramp -> Write
+======================================================================
+Ready to render 6 frames
+
