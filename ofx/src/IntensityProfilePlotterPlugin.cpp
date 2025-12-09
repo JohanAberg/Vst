@@ -337,9 +337,9 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
             return;
         }
         
-        // Fetch images
-        auto srcImg = srcClip->fetchImage(args.time);
-        auto dstImg = dstClip->fetchImage(args.time);
+        // Fetch images - use unique_ptr for automatic cleanup
+        std::unique_ptr<OFX::Image> srcImg(srcClip->fetchImage(args.time));
+        std::unique_ptr<OFX::Image> dstImg(dstClip->fetchImage(args.time));
         
         if (!srcImg || !dstImg) {
             return;
@@ -375,6 +375,7 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
                 std::memcpy(dstRow, srcRow, width * bytesPerPixel);
             }
         }
+        // Images automatically released when unique_ptr goes out of scope
     } catch (...) {
         // Silently catch exceptions - don't want to crash host
     }
