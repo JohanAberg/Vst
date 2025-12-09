@@ -99,6 +99,7 @@ private:
     OFX::BooleanParam* _showReferenceRampParam = nullptr;
     OFX::BooleanParam* _enablePlotParam = nullptr;
     OFX::DoubleParam* _rectShadeParam = nullptr;
+    OFX::StringParam* _rendererParam = nullptr;
     OFX::StringParam* _versionParam = nullptr;
     
     // Components

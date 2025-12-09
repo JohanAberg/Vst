@@ -57,10 +57,12 @@ void IntensitySampler::sampleIntensity(
     // Try GPU first, fallback to CPU
     if (_gpuAvailable && sampleGPU(image, point1, point2, sampleCount, imageWidth, imageHeight,
                                     redSamples, greenSamples, blueSamples)) {
+        _lastUsedRenderer = GPURenderer::getBackendName();
         return;
     }
     
     // CPU fallback
+    _lastUsedRenderer = "CPU";
     sampleCPU(image, point1, point2, sampleCount, imageWidth, imageHeight,
               redSamples, greenSamples, blueSamples);
 }

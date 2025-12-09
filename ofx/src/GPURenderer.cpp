@@ -92,6 +92,33 @@ bool GPURenderer::isAvailable()
     return _metalAvailable || _openclAvailable;
 }
 
+const char* GPURenderer::getBackendName()
+{
+    // Ensure availability has been checked
+    if (!_availabilityChecked) {
+        GPURenderer temp;
+    }
+    
+    // Return the active backend name
+    if (_metalAvailable) {
+        return "Metal (GPU)";
+    } else if (_openclAvailable) {
+        return "OpenCL (GPU)";
+    } else {
+        return "None";
+    }
+}
+
+// Optimization #4: Async GPU queue support
+// Set host-provided OpenCL queue to enable non-blocking GPU execution
+#ifdef HAVE_OPENCL
+void GPURenderer::setHostOpenCLQueue(cl_command_queue hostQueue)
+{
+    _hostOpenCLQueue = hostQueue;
+    _ownsOpenCLQueue = (hostQueue == nullptr);  // If nullptr, we'll create our own
+}
+#endif
+
 bool GPURenderer::sampleIntensity(
     OFX::Image* image,
     const double point1[2],
@@ -555,17 +582,32 @@ bool GPURenderer::sampleOpenCL(
     }
 
     // Create context and command queue
+    // Optimization #4: Use host-provided queue if available (for async execution)
     cl_context context = clCreateContext(nullptr, 1, &device, nullptr, nullptr, &err);
     if (err != CL_SUCCESS) {
         return false;
     }
 
+    cl_command_queue queue = nullptr;
+    if (_hostOpenCLQueue) {
+        // Use host-provided queue - host manages synchronization
+        queue = _hostOpenCLQueue;
+        _ownsOpenCLQueue = false;
+    } else {
+        // Create our own queue - we'll manage synchronization with clFinish
 #ifdef CL_VERSION_2_0
-    cl_command_queue queue = clCreateCommandQueueWithProperties(context, device, 0, &err);
+        queue = clCreateCommandQueueWithProperties(context, device, 0, &err);
 #else
-    cl_command_queue queue = clCreateCommandQueue(context, device, 0, &err);
+        queue = clCreateCommandQueue(context, device, 0, &err);
 #endif
-    if (err != CL_SUCCESS) {
+        if (err != CL_SUCCESS) {
+            clReleaseContext(context);
+            return false;
+        }
+        _ownsOpenCLQueue = true;
+    }
+
+    if (!queue) {
         clReleaseContext(context);
         return false;
     }
@@ -728,7 +770,13 @@ bool GPURenderer::sampleOpenCL(
         return false;
     }
 
-    clFinish(queue);
+    // Optimization #4: Only force sync if we created the queue
+    // If host provided the queue, it manages synchronization (non-blocking return)
+    // This allows host to overlap GPU work with other effects for smooth playback
+    if (_ownsOpenCLQueue) {
+        clFinish(queue);  // Block until GPU work completes (if we own queue)
+    }
+    // Else: Return immediately, host will sync when needed
 
     // Read results (Optimization #3: Use pinned memory if available for faster GPU transfer)
     std::vector<float>* outputPtr = nullptr;
@@ -774,7 +822,11 @@ bool GPURenderer::sampleOpenCL(
     releaseBufferToPool(inputBuffer);
     clReleaseKernel(kernel);
     clReleaseProgram(program);
-    clReleaseCommandQueue(queue);
+    
+    // Only release queue if we created it (not if host provided it)
+    if (_ownsOpenCLQueue && queue) {
+        clReleaseCommandQueue(queue);
+    }
     clReleaseContext(context);
 
     return true;

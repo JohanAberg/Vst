@@ -180,6 +180,14 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     rectShadeParam->setHint("Multiply pixels under the plot rectangle (0=black, 1=unchanged)." );
     rectShadeParam->setAnimates(true);
     
+    // Renderer status (read-only string showing which backend is active)
+    OFX::StringParamDescriptor* rendererParam = desc.defineStringParam("_renderer");
+    rendererParam->setLabel("Renderer");
+    rendererParam->setDefault("Initializing...");
+    rendererParam->setHint("Active rendering backend: Metal (macOS GPU), OpenCL (cross-platform GPU), or CPU fallback");
+    rendererParam->setEvaluateOnChange(false);
+    rendererParam->setAnimates(false);
+    
     // Version info (read-only string)
     OFX::StringParamDescriptor* versionParam = desc.defineStringParam("_version");
     versionParam->setLabel("Version");
@@ -277,6 +285,7 @@ void IntensityProfilePlotterPlugin::setupParameters()
         _enablePlotParam = fetchBooleanParam("enablePlot");
         _rectShadeParam = fetchDoubleParam("rectShade");
 
+        _rendererParam = fetchStringParam("_renderer");
         _versionParam = fetchStringParam("_version");
         if (_versionParam) {
             const std::string buildVersion = std::string("2.0.0.21 ") + __DATE__ + " " + __TIME__;
@@ -391,8 +400,22 @@ void IntensityProfilePlotterPlugin::beginSequenceRender(const OFX::BeginSequence
     if (!_sampler) {
         try {
             _sampler = std::make_unique<IntensitySampler>();
+            
+            // Update renderer status parameter
+            if (!_rendererParam) setupParameters();
+            if (_rendererParam) {
+                // Show which renderer is available
+                if (GPURenderer::isAvailable()) {
+                    _rendererParam->setValue(GPURenderer::getBackendName());
+                } else {
+                    _rendererParam->setValue("CPU");
+                }
+            }
         } catch (...) {
             _sampler = nullptr;
+            if (_rendererParam) {
+                _rendererParam->setValue("Error initializing");
+            }
         }
     }
 }

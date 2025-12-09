@@ -24,6 +24,19 @@ public:
     static bool isAvailable();
     
     /**
+     * Get the name of the active GPU backend ("Metal", "OpenCL", or "None").
+     */
+    static const char* getBackendName();
+    
+    /**
+     * Set host-provided OpenCL command queue for non-blocking GPU execution.
+     * If not called, a queue will be created automatically.
+     */
+#ifdef HAVE_OPENCL
+    void setHostOpenCLQueue(cl_command_queue hostQueue);
+#endif
+    
+    /**
      * Sample intensity values using GPU acceleration.
      * 
      * @param image Source OFX image
@@ -121,6 +134,19 @@ private:
      * Returns true if pinned memory was successfully allocated.
      */
     bool allocatePinnedMemory(cl_context context, size_t size);
+    
+    // Optimization #4: Async GPU queue support (CRITICAL for responsiveness)
+    cl_command_queue _hostOpenCLQueue = nullptr;  // Host-provided queue (we don't own)
+    bool _ownsOpenCLQueue = true;  // Track if we created the queue
+    
+    /**
+     * Set a host-provided OpenCL command queue.
+     * When host provides its queue, plugin enqueues work and returns immediately.
+     * Host manages GPU synchronization for better responsiveness.
+     * 
+     * @param hostQueue OpenCL command queue from host (don't release in plugin)
+     */
+    void setHostOpenCLQueue(cl_command_queue hostQueue);
 #endif
 };
 

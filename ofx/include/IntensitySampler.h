@@ -40,6 +40,12 @@ public:
         std::vector<float>& greenSamples,
         std::vector<float>& blueSamples
     );
+    
+    /**
+     * Get the name of the renderer used for the last sample operation.
+     * @return "Metal (GPU)", "OpenCL (GPU)", or "CPU"
+     */
+    const char* getLastUsedRenderer() const { return _lastUsedRenderer; }
 
 private:
     void sampleCPU(
@@ -69,6 +75,7 @@ private:
     bool _gpuAvailable;
     std::unique_ptr<class GPURenderer> _gpuRenderer;  // Cached GPU renderer
     std::unique_ptr<class CPURenderer> _cpuRenderer;  // Cached CPU renderer
+    const char* _lastUsedRenderer = "Not sampled yet";
 };
 
 #endif // INTENSITY_SAMPLER_H
