@@ -42,11 +42,11 @@ void IntensityProfilePlotterPluginFactory::describe(OFX::ImageEffectDescriptor& 
     
     // Set render thread safety
     desc.setRenderThreadSafety(OFX::eRenderInstanceSafe);
-    desc.setHostFrameThreading(true);  // Enable host-managed multithreading
     
-#ifdef __APPLE__
-    desc.setSupportsMetalRender(true);
-#endif
+// Disable Metal support - causes resource management conflicts with Resolve
+// #ifdef __APPLE__
+//     desc.setSupportsMetalRender(true);
+// #endif
     
     // Standard flags
     desc.setSingleInstance(false);
@@ -343,9 +343,9 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
             return;
         }
         
-        // Fetch images - use unique_ptr for automatic cleanup
-        std::unique_ptr<OFX::Image> srcImg(srcClip->fetchImage(args.time));
-        std::unique_ptr<OFX::Image> dstImg(dstClip->fetchImage(args.time));
+        // Fetch images - OFX manages lifetime, don't use unique_ptr
+        OFX::Image* srcImg = srcClip->fetchImage(args.time);
+        OFX::Image* dstImg = dstClip->fetchImage(args.time);
         
         if (!srcImg || !dstImg) {
             return;
@@ -381,7 +381,7 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
                 std::memcpy(dstRow, srcRow, width * bytesPerPixel);
             }
         }
-        // Images automatically released when unique_ptr goes out of scope
+        // OFX framework manages image lifetime
     } catch (...) {
         // Silently catch exceptions - don't want to crash host
     }
