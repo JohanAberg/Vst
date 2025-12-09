@@ -5,6 +5,9 @@
 #include "GPURenderer.h"
 #include "CPURenderer.h"
 
+// Cached renderer name for overlay display
+static const char* s_cachedRendererName = nullptr;
+
 #include "ofxImageEffect.h"
 #include "ofxParam.h"
 #include "ofxMemory.h"
@@ -407,17 +410,34 @@ void IntensityProfilePlotterPlugin::beginSequenceRender(const OFX::BeginSequence
                 // Show which renderer is available
                 if (GPURenderer::isAvailable()) {
                     _rendererParam->setValue(GPURenderer::getBackendName());
+                    s_cachedRendererName = GPURenderer::getBackendName();
                 } else {
                     _rendererParam->setValue("CPU");
+                    s_cachedRendererName = "CPU";
                 }
             }
         } catch (...) {
             _sampler = nullptr;
             if (_rendererParam) {
                 _rendererParam->setValue("Error initializing");
+                s_cachedRendererName = "Error initializing";
             }
         }
     }
+}
+
+const char* IntensityProfilePlotterPlugin::getRendererName() const
+{
+    // Return cached name if available
+    if (s_cachedRendererName) {
+        return s_cachedRendererName;
+    }
+    
+    // Fallback: check current backend state
+    if (GPURenderer::isAvailable()) {
+        return GPURenderer::getBackendName();
+    }
+    return "CPU";
 }
 
 void IntensityProfilePlotterPlugin::endSequenceRender(const OFX::EndSequenceRenderArguments& args)

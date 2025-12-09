@@ -29,6 +29,9 @@ public:
     void setInstance(IntensityProfilePlotterPlugin* instance) { _instance = instance; }
 
 private:
+    // Helper to draw text using OpenGL primitives
+    void drawText(double x, double y, const char* text, double scale = 1.0);
+    
     enum DragState {
         kDragNone,
         kDragPoint1,

@@ -53,6 +53,9 @@ public:
     OFX::RGBAParam* getBlueCurveColorParam() const { return _blueCurveColorParam; }
     OFX::BooleanParam* getShowReferenceRampParam() const { return _showReferenceRampParam; }
     OFX::BooleanParam* getEnablePlotParam() const { return _enablePlotParam; }
+    
+    // Get current renderer name for display
+    const char* getRendererName() const;
 
     // Clip accessors for overlay sampling
     OFX::Clip* getSourceClip() { if(!_srcClip) setupClips(); return _srcClip; }

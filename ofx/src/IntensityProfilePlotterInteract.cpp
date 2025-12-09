@@ -350,6 +350,113 @@ void IntensityProfilePlotterInteract::drawHandle(const OFX::DrawArgs& args, doub
     glPopAttrib();
 }
 
+// Simple bitmap font for displaying text in OpenGL
+// Uses 5x7 pixel grid for each character
+void IntensityProfilePlotterInteract::drawText(double x, double y, const char* text, double scale)
+{
+    if (!text) return;
+    
+    // Simple 5x7 bitmap font (only ASCII characters we need)
+    // Each character is represented as 7 bytes (rows), 5 bits wide
+    static const unsigned char font5x7[][7] = {
+        // 'A' = 65
+        {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11},
+        // 'C' = 67
+        {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E},
+        // 'E' = 69
+        {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F},
+        // 'G' = 71
+        {0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F},
+        // 'L' = 76
+        {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F},
+        // 'M' = 77
+        {0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11},
+        // 'N' = 78
+        {0x11, 0x11, 0x19, 0x15, 0x13, 0x11, 0x11},
+        // 'O' = 79
+        {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E},
+        // 'P' = 80
+        {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10},
+        // 'T' = 84
+        {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04},
+        // 'U' = 85
+        {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E},
+        // '(' = 40
+        {0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02},
+        // ')' = 41
+        {0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08},
+        // ' ' = 32 (space)
+        {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+    };
+    
+    // Map characters to font array indices
+    auto getCharIndex = [](char c) -> int {
+        switch(c) {
+            case 'A': return 0;
+            case 'C': return 1;
+            case 'E': return 2;
+            case 'G': return 3;
+            case 'L': return 4;
+            case 'M': return 5;
+            case 'N': return 6;
+            case 'O': return 7;
+            case 'P': return 8;
+            case 'T': return 9;
+            case 'U': return 10;
+            case '(': return 11;
+            case ')': return 12;
+            case ' ': return 13;
+            default: return 13; // Space for unknown chars
+        }
+    };
+    
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+    glDisable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
+    double charWidth = 6.0 * scale;  // 5 pixels + 1 pixel spacing
+    double charHeight = 8.0 * scale; // 7 pixels + 1 pixel spacing
+    double pixelSize = scale;
+    
+    double cursorX = x;
+    
+    for (const char* p = text; *p; ++p) {
+        int idx = getCharIndex(*p);
+        const unsigned char* glyph = font5x7[idx];
+        
+        // Draw each pixel of the character
+        for (int row = 0; row < 7; ++row) {
+            unsigned char rowData = glyph[row];
+            for (int col = 0; col < 5; ++col) {
+                if (rowData & (1 << (4 - col))) {
+                    // Draw black shadow for readability
+                    glColor4f(0.0f, 0.0f, 0.0f, 0.9f);
+                    glBegin(GL_QUADS);
+                    glVertex2d(cursorX + col * pixelSize - 1, y - row * pixelSize - 1);
+                    glVertex2d(cursorX + (col + 1) * pixelSize + 1, y - row * pixelSize - 1);
+                    glVertex2d(cursorX + (col + 1) * pixelSize + 1, y - (row + 1) * pixelSize + 1);
+                    glVertex2d(cursorX + col * pixelSize - 1, y - (row + 1) * pixelSize + 1);
+                    glEnd();
+                    
+                    // Draw white pixel
+                    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+                    glBegin(GL_QUADS);
+                    glVertex2d(cursorX + col * pixelSize, y - row * pixelSize);
+                    glVertex2d(cursorX + (col + 1) * pixelSize, y - row * pixelSize);
+                    glVertex2d(cursorX + (col + 1) * pixelSize, y - (row + 1) * pixelSize);
+                    glVertex2d(cursorX + col * pixelSize, y - (row + 1) * pixelSize);
+                    glEnd();
+                }
+            }
+        }
+        
+        cursorX += charWidth;
+    }
+    
+    glPopAttrib();
+}
+
 void IntensityProfilePlotterInteract::drawPlot(const OFX::DrawArgs& args, OFX::Image& src, int imgW, int imgH, double nx1, double ny1, double nx2, double ny2)
 {
     if (!_instance) return;
@@ -591,6 +698,41 @@ bool IntensityProfilePlotterInteract::draw(const OFX::DrawArgs& args)
         drawHandle(args, rx + rw, ry, _dragState == kDragRectTR);
         drawHandle(args, rx, ry + rh, _dragState == kDragRectBL);
         drawHandle(args, rx + rw, ry + rh, _dragState == kDragRectBR);
+        
+        // Draw renderer status text in top-left corner
+        const char* rendererName = _instance->getRendererName();
+        if (rendererName && rendererName[0]) {
+            // Position text in top-left with some padding
+            double textX = 20.0;
+            double textY = height - 20.0;
+            double textScale = 2.0; // Make text larger for visibility
+            
+            // Draw semi-transparent background box for better readability
+            double textWidth = 0;
+            for (const char* p = rendererName; *p; ++p) {
+                textWidth += 6.0 * textScale;
+            }
+            double textHeight = 8.0 * textScale;
+            
+            glPushAttrib(GL_ALL_ATTRIB_BITS);
+            glDisable(GL_TEXTURE_2D);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            
+            // Background box
+            glColor4f(0.0f, 0.0f, 0.0f, 0.7f);
+            glBegin(GL_QUADS);
+            glVertex2d(textX - 5, textY + 5);
+            glVertex2d(textX + textWidth + 5, textY + 5);
+            glVertex2d(textX + textWidth + 5, textY - textHeight - 5);
+            glVertex2d(textX - 5, textY - textHeight - 5);
+            glEnd();
+            
+            glPopAttrib();
+            
+            // Draw the text
+            drawText(textX, textY, rendererName, textScale);
+        }
     } catch (...) {}
     
     return true;
