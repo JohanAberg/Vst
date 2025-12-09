@@ -124,6 +124,10 @@ void IntensityProfilePlotterInteract::drawPoint(const OFX::DrawArgs& args, doubl
     glDisable(GL_TEXTURE_2D);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_LINE_SMOOTH);
+    glEnable(GL_POLYGON_SMOOTH);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+    glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
     
     const int segments = 20;
     
@@ -188,6 +192,8 @@ void IntensityProfilePlotterInteract::drawLine(const OFX::DrawArgs& args, double
     glDisable(GL_TEXTURE_2D);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_LINE_SMOOTH);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
     
     // Draw black shadow outline for visibility
     glColor4f(0.0f, 0.0f, 0.0f, 0.8f);
@@ -213,6 +219,39 @@ void IntensityProfilePlotterInteract::drawLine(const OFX::DrawArgs& args, double
     glVertex2d(x2, y2);
     glEnd();
     
+    // Draw midpoint rectangle hint for drag affordance
+    double midX = (x1 + x2) * 0.5;
+    double midY = (y1 + y2) * 0.5;
+    double rectSize = 8.0;
+    
+    // Draw dark shadow quad for depth
+    glColor4f(0.0f, 0.0f, 0.0f, 0.7f);
+    glBegin(GL_QUADS);
+    glVertex2d(midX - rectSize - 1, midY - rectSize - 1);
+    glVertex2d(midX + rectSize + 1, midY - rectSize - 1);
+    glVertex2d(midX + rectSize + 1, midY + rectSize + 1);
+    glVertex2d(midX - rectSize - 1, midY + rectSize + 1);
+    glEnd();
+    
+    // Draw light gray fill
+    glColor4f(0.7f, 0.7f, 0.7f, 0.8f);
+    glBegin(GL_QUADS);
+    glVertex2d(midX - rectSize, midY - rectSize);
+    glVertex2d(midX + rectSize, midY - rectSize);
+    glVertex2d(midX + rectSize, midY + rectSize);
+    glVertex2d(midX - rectSize, midY + rectSize);
+    glEnd();
+    
+    // Draw white outline
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    glLineWidth(1.5f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2d(midX - rectSize, midY - rectSize);
+    glVertex2d(midX + rectSize, midY - rectSize);
+    glVertex2d(midX + rectSize, midY + rectSize);
+    glVertex2d(midX - rectSize, midY + rectSize);
+    glEnd();
+    
     glPopAttrib();
 }
 
@@ -220,8 +259,12 @@ void IntensityProfilePlotterInteract::drawRect(const OFX::DrawArgs& args, double
 {
     glPushAttrib(GL_ALL_ATTRIB_BITS);
     glDisable(GL_TEXTURE_2D);
-
-
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_POLYGON_SMOOTH);
+    glEnable(GL_LINE_SMOOTH);
+    glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
 
     // Fill (semi-transparent)
     glColor4f(0.1f, 0.1f, 0.1f, 0.35f);
@@ -255,6 +298,10 @@ void IntensityProfilePlotterInteract::drawHandle(const OFX::DrawArgs& args, doub
     glDisable(GL_TEXTURE_2D);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_POLYGON_SMOOTH);
+    glEnable(GL_LINE_SMOOTH);
+    glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
     
     double half = HANDLE_SIZE * 0.5;
     
