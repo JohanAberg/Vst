@@ -325,9 +325,10 @@ void IntensityProfilePlotterInteract::drawPlot(const OFX::DrawArgs& args, OFX::I
     glVertex2d(rectX, rectY + rectH);
     glEnd();
 
+    glLineWidth(static_cast<float>(lineWidth));
+    
     auto plotChannel = [&](const std::vector<float>& c, double rC, double gC, double bC) {
         glColor3f(static_cast<float>(rC), static_cast<float>(gC), static_cast<float>(bC));
-        glLineWidth(static_cast<float>(lineWidth));
         glBegin(GL_LINE_STRIP);
         for (int i = 0; i < sampleCount; ++i) {
             const double t = (sampleCount == 1) ? 0.0 : static_cast<double>(i) / (sampleCount - 1);
