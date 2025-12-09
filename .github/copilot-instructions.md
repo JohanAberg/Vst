@@ -1,151 +1,181 @@
-# Cross-Platform OFX Plugin Development Agent
-
-## Agent Purpose & Capabilities
-I am a specialized C++ development agent for creating OpenFX (OFX) video plugins targeting DaVinci Resolve, Nuke, and similar hosts across **Windows 11, macOS, and Linux**. I focus on GPU-accelerated image processing with multi-vendor GPU support:
-- **NVIDIA GPUs**: OpenCL on all platforms
-- **AMD GPUs**: OpenCL on Windows/Linux, Metal on macOS
-- **Apple Silicon (M1/M2/M3)**: Metal on macOS (native performance)
-- **Intel GPUs**: OpenCL fallback on all platforms
-
-### When to Invoke This Agent
-- Writing cross-platform OFX plugin C++ code (Windows/macOS/Linux)
-- Implementing GPU kernels for NVIDIA, AMD, or Apple Silicon
-- Designing custom OpenGL overlay interactions in host viewport
-- Debugging CMake cross-platform build issues
-- Troubleshooting plugin loading on different OS/GPU combinations
-- Optimizing GPU rendering for specific hardware (NVIDIA RTX, AMD RX, Apple M-series)
-- Setting up CI/CD for multi-platform builds
-
-### Agent Boundaries
-✅ **I WILL**: Write platform-conditional code, implement OpenCL/Metal kernels, configure CMake for cross-compilation, debug platform-specific issues, optimize for specific GPUs, handle endianness differences
-
-❌ **I WON'T**: Write CUDA code (OpenCL is priority), support DirectX compute, implement Vulkan backends, debug vendor driver issues, provide distro-specific Linux packaging
+# Plugin Collection: OFX Video + VST3 Audio
 
 ## Project Overview
-C++ OpenFX (OFX) video plugin collection targeting DaVinci Resolve, Nuke, and similar hosts. Primary focus: GPU-accelerated image processing with Metal (macOS) and OpenCL (Windows/Linux) backends across multiple platforms and GPU vendors.
+Multi-plugin C++ repository containing:
+1. **OFX Plugin** (`ofx/`): Intensity Profile Plotter for DaVinci Resolve - GPU-accelerated video analysis with Metal/OpenCL
+2. **VST3 Plugins** (commented out): Audio saturation effects using JUCE (`vst_juce/`) and VST3 SDK (`vst_codex/`)
 
-## Architecture
+**Active development**: OFX video plugin. VST3 builds disabled in root `CMakeLists.txt` (see `BUILD_VST3_*` options).
 
-### Component Hierarchy
-```
-PluginCollection (root)
-├── ofx/                          # OFX plugin implementations
-│   ├── src/                      # C++ plugin logic
-│   │   ├── *Plugin.cpp          # OFX entry points & parameter definitions
-│   │   ├── *Interact.cpp        # Custom overlay UI in host viewport
-│   │   ├── *Sampler.cpp         # Image sampling logic
-│   │   ├── GPURenderer.cpp      # Metal/OpenCL dispatcher
-│   │   └── CPURenderer.cpp      # Fallback implementation
-│   ├── kernels/                 # GPU compute kernels
-│   │   ├── *.metal              # Metal shaders (macOS)
-│   │   └── *.cl                 # OpenCL kernels (cross-platform)
-│   └── include/                 # Plugin headers
-└── vst_*/                       # Future: VST3 plugins (commented out)
+## Quick Start
+
+### Build OFX Plugin (macOS)
+```bash
+cd /Users/johan/Vst
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+cmake --build . --config Release
+sudo cp -r ofx/IntensityProfilePlotter.ofx.bundle /Library/OFX/Plugins/
 ```
 
-### Data Flow
-1. **Host → Plugin**: Image buffers + parameter values via OFX API
-2. **Plugin Logic**: Determine GPU backend availability (Metal > OpenCL > CPU)
-3. **GPU Kernel**: Process image data in parallel
-4. **Plugin → Host**: Modified image buffer returned
+### Enable VST3 Builds
+Uncomment `BUILD_VST3_*` options in root `CMakeLists.txt`, then run JUCE setup:
+```bash
+./setup_juce.sh  # Downloads JUCE framework for vst_juce/
+cmake .. -DBUILD_VST3_ANALOG_SATURATION=ON
+```
 
-### Critical Design Decisions
-- **Multi-backend strategy**: Single codebase supports Metal, OpenCL, and CPU - runtime detection ensures graceful degradation
-- **OFX over VST3**: OFX provides better cross-host compatibility (Resolve, Nuke, Flame) vs VST3 (audio-focused)
-- **CMake over Xcode/VS projects**: Enables cross-platform builds from single configuration
+## Project Structure
+
+```
+/Users/johan/Vst/
+├── ofx/                          # IntensityProfilePlotter OFX plugin (ACTIVE)
+│   ├── src/                      # Plugin implementation
+│   │   ├── IntensityProfilePlotterPlugin.cpp    # OFX entry point, parameters
+│   │   ├── IntensityProfilePlotterInteract.cpp  # Viewport overlay (drag endpoints)
+│   │   ├── IntensitySampler.cpp                 # GPU/CPU sampling coordinator
+│   │   ├── GPURenderer.cpp                      # Metal (macOS) / OpenCL dispatcher
+│   │   ├── CPURenderer.cpp                      # Fallback bilinear sampling
+│   │   └── ProfilePlotter.cpp                   # RGB curve rendering via DrawSuite
+│   ├── kernels/
+│   │   ├── intensitySampler.metal               # Metal compute shader (compiled to .metallib)
+│   │   └── intensitySampler.cl                  # OpenCL kernel (runtime loaded)
+│   ├── include/                  # Headers (matching src/)
+│   ├── CMakeLists.txt            # OFX-specific build rules
+│   └── *.md                      # Architecture docs (ARCHITECTURE.md, IMPLEMENTATION_NOTES.md)
+│
+├── vst_juce/                     # Analog saturation VST3 (JUCE-based, disabled)
+│   └── Source/                   # PluginProcessor, CircuitModels, WaveDigitalFilter
+├── vst_codex/                    # Analog saturation VST3 (VST3 SDK-based, disabled)
+│   ├── src/dsp/SaturationModel.cpp
+│   └── cmake/FetchVST3SDK.cmake  # Auto-downloads VST3 SDK
+│
+├── CMakeLists.txt                # Root: controls which plugins build
+├── BUILD.md                      # JUCE setup instructions
+└── ALGORITHMS.md                 # WDF + state-space saturation theory
+```
+
+## Architecture Essentials
+
+### OFX Plugin Data Flow
+```
+DaVinci Resolve Viewer
+    ↓ (Mouse drag endpoints)
+IntensityProfilePlotterInteract → Updates P1/P2 parameters
+    ↓
+IntensityProfilePlotterPlugin::render()
+    ├─→ Select data source: Input clip / Auxiliary clip / Built-in ramp
+    ├─→ IntensitySampler → GPURenderer (Metal/OpenCL) OR CPURenderer
+    │       ↓ Parallel sampling along scan line [P1→P2]
+    │       ↓ Returns RGB intensity vectors
+    └─→ ProfilePlotter → Draws curves + reference ramp via OFX DrawSuite
+            ↓
+        Overlay rendered in Resolve viewport
+```
+
+**Key Design**: GPU backend selected at runtime (Metal > OpenCL > CPU). No CUDA - OpenCL ensures NVIDIA/AMD/Intel cross-compatibility.
+
+### VST3 Plugins (Currently Disabled)
+- **vst_juce**: Uses JUCE's `AudioProcessor`, relies on WDF (Wave Digital Filters) for circuit modeling
+- **vst_codex**: Native VST3 SDK via `smtg_add_vst3plugin()`, implements `IAudioProcessor` directly
+- See `ALGORITHMS.md` for WDF theory and nonlinear state-space models (tube triode, BJT)
 
 ## Build System
 
-### CMake Configuration
-```bash
-# Standard build flow
-cd c:\Users\aberg\Documents\Vst
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --config Release
+### Root CMakeLists.txt Pattern
+```cmake
+# Key toggle: Plugins are opt-in via BUILD_* options
+option(BUILD_OFX_PLUGIN "Build Intensity Profile Plotter" ON)
+# option(BUILD_VST3_CIRCUIT_SATURATION "Build VST3 via SDK" ON)  # Commented out
+# option(BUILD_VST3_ANALOG_SATURATION "Build VST3 via JUCE" ON)  # Commented out
 
-# Windows-specific: Point to OpenCL SDK if not system-installed
-cmake .. -DOpenCL_INCLUDE_DIR="C:/Users/aberg/Documents/OpenCL-SDK/include" \
-         -DOpenCL_LIBRARY="C:/Users/aberg/Documents/OpenCL-SDK/lib/OpenCL.lib"
+# Platform-specific SDK paths (user-overridable)
+if(APPLE)
+    set(OFX_SDK_PATH "/Users/johan/openfx" CACHE PATH "...")
+elseif(WIN32)
+    set(OFX_SDK_PATH "C:/Users/aberg/Documents/openfx" CACHE PATH "...")
 ```
 
-### CMake Conventions
-- **Comments**: Use `#` not `//` (common mistake - CMake != C++)
-- **Platform detection**: `if(WIN32)`, `if(APPLE)`, `if(UNIX)` - set `PLATFORM_*` flags
-- **Optional dependencies**: Check existence before `add_subdirectory()` - emit warnings, don't fail
-- **SDK paths**: Use `CACHE PATH` for user-overridable locations
+**Critical**: Root CMakeLists checks SDK existence before `add_subdirectory()` - emits warnings instead of fatal errors if missing.
 
-### Build Targets
-- `IntensityProfilePlotter`: Main OFX plugin (`.ofx.bundle` on macOS, `.ofx` on Windows/Linux)
-- `OfxSupport`: OFX SDK support library (from `${OFX_SDK_PATH}/Support/Library`)
+### CMake Anti-Patterns to Avoid
+❌ `// comments` → Use `#` (CMake != C++)  
+❌ Hardcoded paths → Use `CACHE PATH` for SDK locations  
+❌ `FATAL_ERROR` for optional deps → Emit `WARNING` and skip subdirectory  
 
 ### Platform-Specific Output
-**macOS**: 
-- Bundle structure: `IntensityProfilePlotter.ofx.bundle/Contents/MacOS/IntensityProfilePlotter.ofx`
-- Post-build renames binary to `.ofx` extension (DaVinci Resolve requirement)
-- Metal shaders compiled to `.metallib` and embedded in bundle Resources
 
-**Windows/Linux**:
-- Single file: `IntensityProfilePlotter.ofx`
-- OpenCL kernels copied alongside binary for runtime loading
+**macOS Bundle Structure**:
+```
+IntensityProfilePlotter.ofx.bundle/
+└── Contents/
+    ├── Info.plist
+    ├── MacOS/
+    │   └── IntensityProfilePlotter.ofx  # Binary (post-build renamed from .dylib)
+    └── Resources/
+        └── intensitySampler.metallib    # Compiled Metal kernels
+```
+Post-build command: `mv .../MacOS/IntensityProfilePlotter .../MacOS/IntensityProfilePlotter.ofx`
+
+**Windows/Linux**: Single file `IntensityProfilePlotter.ofx`, OpenCL kernels copied alongside.
+
+### Metal Shader Compilation (macOS)
+```cmake
+# ofx/CMakeLists.txt checks if Metal toolchain available
+execute_process(COMMAND xcrun -sdk macosx metal -version ...)
+# Compile .metal → .air → .metallib at build time
+# Embedded in bundle via MACOSX_PACKAGE_LOCATION Resources
+```
+**Fallback**: If `xcrun` fails, `HAVE_METAL` set to OFF, plugin still builds without Metal support.
 
 ## GPU Backend Development
 
-### Backend Selection Logic
+### Runtime Backend Selection
 ```cpp
-// Runtime priority chain (implement in GPURenderer.cpp)
+// GPURenderer.cpp initialization order (Metal > OpenCL > CPU)
 if (macOS && Metal available) {
-    if (Apple Silicon) → use Metal (best performance)
-    else if (AMD GPU) → use Metal or OpenCL
+    if (Apple Silicon) → Metal (unified memory, best perf)
+    else if (AMD GPU) → Metal or OpenCL
     else → OpenCL (NVIDIA on Intel Mac)
 }
 else if (OpenCL available) {
-    // Auto-detect: NVIDIA > AMD > Intel
-    if (NVIDIA GPU detected) → use OpenCL (CUDA-accelerated)
-    else if (AMD GPU detected) → use OpenCL (ROCm/APP)
-    else if (Intel GPU detected) → use OpenCL (Neo)
+    // Query devices: prefer NVIDIA > AMD > Intel
+    clGetDeviceInfo(device, CL_DEVICE_NAME, ...)  // Log device selection
 }
-else → fallback to CPU (SIMD if available)
+else → CPURenderer with bilinear interpolation
 ```
 
-### OpenCL Kernel Development
-**File**: `ofx/kernels/intensitySampler.cl`
+### Adding New GPU Kernels
 
-```opencl
-__kernel void sample_intensity(
-    __global const float4* input,
-    __global float4* output,
-    const int width,
-    const int height
-) {
-    int x = get_global_id(0);
-    int y = get_global_id(1);
-    // ... processing logic
-}
-```
-
-**Host code pattern** (in `GPURenderer.cpp`):
+**1. Prototype in CPU** (`CPURenderer.cpp`):
 ```cpp
-cl_kernel kernel = clCreateKernel(program, "sample_intensity", &err);
-clSetKernelArg(kernel, 0, sizeof(cl_mem), &inputBuffer);
-size_t globalWorkSize[2] = {width, height};
-clEnqueueNDRangeKernel(queue, kernel, 2, NULL, globalWorkSize, NULL, 0, NULL, NULL);
-```
-
-### Metal Shader Development
-**File**: `ofx/kernels/intensitySampler.metal`
-
-```metal
-kernel void sample_intensity(
-    texture2d<float, access::read> input [[texture(0)]],
-    texture2d<float, access::write> output [[texture(1)]],
-    uint2 gid [[thread_position_in_grid]]
-) {
-    // ... processing logic
+// Verify algorithm correctness before GPU port
+for (int i = 0; i < sampleCount; ++i) {
+    float t = i / (float)(sampleCount - 1);
+    float x = p1.x + t * (p2.x - p1.x);
+    float y = p1.y + t * (p2.y - p1.y);
+    // Bilinear sample at (x, y)...
 }
 ```
 
-**Build integration**: Shaders compile at CMake build time via `xcrun metal`
+**2. Translate to OpenCL** (`kernels/*.cl`):
+```opencl
+__kernel void sample_intensity(__global const float4* input, ...) {
+    int gid = get_global_id(0);  // Parallel across samples
+    // ... kernel logic, mirrors CPU version
+}
+```
+
+**3. Port to Metal** (`kernels/*.metal`):
+```metal
+kernel void sample_intensity(texture2d<float, access::read> input [[texture(0)]],
+                              device float* output [[buffer(1)]],
+                              uint gid [[thread_position_in_grid]]) {
+    // Use texture2d.read() for bilinear sampling
+}
+```
+
+**Pro tip**: Profile CPU vs GPU - for <256 samples, CPU may be faster due to kernel launch overhead.
 
 ## OFX Plugin Development
 
@@ -200,61 +230,34 @@ void render(const RenderArguments &args) {
 
 ## Dependencies Management
 
-### Required SDKs
-| SDK | Purpose | Windows Path | macOS Path | Linux Path |
-|-----|---------|--------------|------------|------------|
-| OpenFX | Plugin API | `C:/Users/aberg/Documents/openfx` | `/Users/johan/openfx` | `~/openfx` |
-| OpenCL | GPU compute | `C:/Users/aberg/Documents/OpenCL-SDK` | System (via Xcode) | `/usr/include/CL` |
+### SDK Setup by Platform
 
-### Platform-Specific SDK Paths
+| SDK | Windows | macOS | Linux |
+|-----|---------|-------|-------|
+| **OpenFX** | `C:/Users/aberg/Documents/openfx` | `/Users/johan/openfx` | `~/openfx` |
+| **OpenCL** | Intel/AMD/NVIDIA SDK | System framework (Xcode) | `apt install ocl-icd-opencl-dev` |
+| **JUCE** (VST3) | Run `./setup_juce.sh` → clones JUCE 8.0 | Same | Same |
+| **VST3 SDK** | Auto-fetched by `vst_codex/cmake/FetchVST3SDK.cmake` | Auto | Auto |
 
-#### Windows 11
-```cmake
-set(OFX_SDK_PATH "C:/Users/aberg/Documents/openfx")
-set(OpenCL_INCLUDE_DIR "C:/Users/aberg/Documents/OpenCL-SDK/include")
-set(OpenCL_LIBRARY "C:/Users/aberg/Documents/OpenCL-SDK/lib/OpenCL.lib")
-```
-
-#### macOS (Intel + Apple Silicon)
-```cmake
-set(OFX_SDK_PATH "/Users/johan/openfx")
-# Metal framework auto-detected by CMake
-# OpenCL deprecated but available at /System/Library/Frameworks/OpenCL.framework
-```
-
-#### Linux (Ubuntu/Debian)
-```cmake
-set(OFX_SDK_PATH "/home/user/openfx")
-# OpenCL via package manager:
-# apt install ocl-icd-opencl-dev  # Headers
-# NVIDIA: apt install nvidia-opencl-dev
-# AMD: Install ROCm from https://rocm.docs.amd.com/
-```
-
-### OpenCL SDK Setup (Windows)
-Download options:
-1. **Intel OpenCL SDK**: https://github.com/intel/llvm/releases (recommended)
-2. **AMD APP SDK**: https://github.com/GPUOpen-LibrariesAndSDKs/OCL-SDK
-3. **Khronos Headers + ICD**: https://github.com/KhronosGroup/OpenCL-Headers
-
-Extract structure:
-```
-C:/Users/aberg/Documents/OpenCL-SDK/
-├── include/
-│   └── CL/
-│       ├── cl.h
-│       └── opencl.h
-└── lib/
-    └── OpenCL.lib
-```
-
-### OFX SDK Setup
+### First-Time Setup
 ```bash
-# Clone official SDK
-git clone https://github.com/AcademySoftwareFoundation/openfx.git
-# Windows: C:/Users/aberg/Documents/openfx
-# macOS: /Users/johan/openfx
+# 1. Clone OpenFX SDK (required for OFX plugin)
+git clone https://github.com/AcademySoftwareFoundation/openfx.git /Users/johan/openfx
+
+# 2. Optional: Enable VST3 builds
+./setup_juce.sh  # Downloads JUCE framework
+# Then uncomment BUILD_VST3_* in root CMakeLists.txt
 ```
+
+### Windows-Specific: OpenCL SDK
+Download Intel SDK (recommended): https://github.com/intel/llvm/releases  
+Extract to `C:/Users/aberg/Documents/OpenCL-SDK/`:
+```
+OpenCL-SDK/
+├── include/CL/{cl.h, opencl.h}
+└── lib/OpenCL.lib
+```
+Pass to CMake: `-DOpenCL_INCLUDE_DIR=... -DOpenCL_LIBRARY=...`
 
 ## Debugging Workflows
 
@@ -475,6 +478,32 @@ When implementing new image processing:
 - **Debugging**: Intel VTune Profiler
 - **Fallback role**: Often used when dedicated GPU unavailable
 
+## GPU Vendor-Specific Notes
+
+### NVIDIA (GeForce RTX, Quadro, Tesla)
+- **Best on**: Windows/Linux with latest CUDA drivers
+- **OpenCL optimization**: Use `__local` memory, coalesce global memory access
+- **Debugging**: NVIDIA Nsight Compute for kernel profiling
+- **Work group size**: Multiples of 32 (warp size)
+
+### AMD (Radeon RX, Radeon Pro)
+- **Best on**: Linux (ROCm) or Windows (Adrenalin drivers)
+- **OpenCL optimization**: Wave size 64 (RDNA), tune LDS usage
+- **Debugging**: AMD Radeon GPU Profiler (RGP)
+- **macOS Metal**: Use `threadgroup_barrier()` for synchronization
+
+### Apple Silicon (M1/M2/M3)
+- **Best on**: macOS with Metal API
+- **Metal optimization**: Leverage unified memory, use `simdgroup` functions
+- **Debugging**: Xcode GPU Frame Capture, Metal Debugger
+- **Neural Engine**: Can offload ML operations via Core ML
+
+### Intel (Iris Xe, Arc)
+- **Best on**: Linux (Neo driver) or Windows (Intel SDK)
+- **OpenCL optimization**: Sub-group size 8-16, avoid register spilling
+- **Debugging**: Intel VTune Profiler
+- **Fallback role**: Often used when dedicated GPU unavailable
+
 ## Cross-Platform Build Instructions
 
 ### Windows 11 (Visual Studio 2022)
@@ -517,34 +546,6 @@ sudo cp build/ofx/*.ofx /usr/OFX/Plugins/
 | Ubuntu 22.04 | NVIDIA | CUDA 11.8+ | High |
 | Ubuntu 22.04 | AMD | ROCm 5.7+ | Medium |
 | Windows/Linux | Intel Arc | Level Zero | Low |
-
-## Tool Sets
-
-### ofx-development
-Multi-platform CMake setup, compiler configuration, SDK management
-- **Windows**: Visual Studio 2022, build to `C:\Program Files\Common Files\OFX\Plugins\`
-- **macOS**: Xcode, universal binaries (arm64 + x86_64), install to `/Library/OFX/Plugins/`
-- **Linux**: GCC/Clang, RPATH handling, install to `/usr/OFX/Plugins/`
-
-### gpu-debugging
-OpenCL/Metal validation and vendor-specific profilers
-- **NVIDIA**: Nsight Compute (profiler), Nsight Graphics (debugger)
-- **AMD**: Radeon GPU Profiler, GPU Detective
-- **Apple**: Xcode Instruments (GPU Timeline), Metal Debugger
-- **Intel**: VTune Profiler, Graphics Performance Analyzers
-
-### resolve-integration
-DaVinci Resolve plugin testing and debugging workflow
-- Build with Debug config
-- Copy to platform-specific OFX directory
-- Attach debugger to Resolve process
-- Set breakpoints in render() or parameter handlers
-
-### opencl-setup
-OpenCL SDK setup and validation across platforms
-- **Windows**: Intel/AMD/NVIDIA SDK options
-- **macOS**: Built-in OpenCL framework (deprecated, prefer Metal)
-- **Linux**: Package manager installation (ocl-icd-opencl-dev + vendor ICD)
 
 ---
 
