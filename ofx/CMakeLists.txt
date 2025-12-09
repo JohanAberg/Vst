@@ -32,13 +32,34 @@ elseif(UNIX)
     set(PLATFORM_LINUX ON)
 endif()
 
-# OpenCL
+# OpenCL support (optional GPU acceleration)
+set(HAVE_OPENCL OFF)
+
+# Set default OpenCL SDK path for Windows (SYCL SDK location)
+if(WIN32 AND NOT DEFINED OpenCL_INCLUDE_DIR)
+    set(OPENCL_SDK_PATH "C:/Users/aberg/Documents/OpenCL-Setup/sycl_windows")
+    if(EXISTS "${OPENCL_SDK_PATH}/include/CL/cl.h" AND EXISTS "${OPENCL_SDK_PATH}/lib/ur_loader.lib")
+        set(OpenCL_INCLUDE_DIR "${OPENCL_SDK_PATH}/include" CACHE PATH "OpenCL include directory")
+        set(OpenCL_LIBRARY "${OPENCL_SDK_PATH}/lib/ur_loader.lib" CACHE FILEPATH "OpenCL library")
+        message(STATUS "✓ Using local SYCL/OpenCL SDK: ${OPENCL_SDK_PATH}")
+    endif()
+endif()
+
+# Try to find OpenCL
 find_package(OpenCL QUIET)
+
 if(OpenCL_FOUND)
     set(HAVE_OPENCL ON)
-    message(STATUS "OpenCL found: ${OpenCL_LIBRARIES}")
+    message(STATUS "✓ OpenCL found: ${OpenCL_LIBRARIES}")
+    message(STATUS "  Include: ${OpenCL_INCLUDE_DIRS}")
+elseif(DEFINED OpenCL_INCLUDE_DIR AND DEFINED OpenCL_LIBRARY)
+    # Manual paths provided but find_package failed - set it up manually
+    set(HAVE_OPENCL ON)
+    set(OpenCL_INCLUDE_DIRS "${OpenCL_INCLUDE_DIR}")
+    set(OpenCL_LIBRARIES "${OpenCL_LIBRARY}")
+    message(STATUS "✓ OpenCL configured manually: ${OpenCL_LIBRARY}")
 else()
-    message(WARNING "OpenCL not found - OpenCL support will be disabled")
+    message(STATUS "⊘ OpenCL not found - CPU fallback will be used (still fast for <512 samples)")
     set(HAVE_OPENCL OFF)
 endif()
 
