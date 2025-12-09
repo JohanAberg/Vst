@@ -79,6 +79,7 @@ public:
     }
 
 private:
+    OFX::ChoiceParam* _backendParam = nullptr; // 0=Auto, 1=OpenCL, 2=CPU
     void setupParameters();
     void setupClips();
     

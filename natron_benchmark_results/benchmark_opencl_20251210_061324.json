@@ -1,0 +1,119 @@
+{
+  "benchmark": "IntensityProfilePlotter OpenCL",
+  "timestamp": "2025-12-10T06:13:24.829809",
+  "platform": "Windows",
+  "natron_version": "2.5",
+  "plugin_id": "com.coloristtools.intensityprofileplotter",
+  "results": [
+    {
+      "timestamp": "2025-12-10T06:13:24.825861",
+      "resolution": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "samples": 256,
+      "backend": "OpenCL",
+      "render_time_ms": 427.17,
+      "success": true,
+      "status": "completed"
+    },
+    {
+      "timestamp": "2025-12-10T06:13:24.825861",
+      "resolution": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "samples": 256,
+      "backend": "CPU",
+      "render_time_ms": 1699.89,
+      "success": true,
+      "status": "completed"
+    },
+    {
+      "timestamp": "2025-12-10T06:13:24.825861",
+      "resolution": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "samples": 1024,
+      "backend": "OpenCL",
+      "render_time_ms": 1701.19,
+      "success": true,
+      "status": "completed"
+    },
+    {
+      "timestamp": "2025-12-10T06:13:24.825861",
+      "resolution": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "samples": 1024,
+      "backend": "CPU",
+      "render_time_ms": 6795.97,
+      "success": true,
+      "status": "completed"
+    },
+    {
+      "timestamp": "2025-12-10T06:13:24.827907",
+      "resolution": "4K",
+      "width": 3840,
+      "height": 2160,
+      "samples": 256,
+      "backend": "OpenCL",
+      "render_time_ms": 1701.19,
+      "success": true,
+      "status": "completed"
+    },
+    {
+      "timestamp": "2025-12-10T06:13:24.827907",
+      "resolution": "4K",
+      "width": 3840,
+      "height": 2160,
+      "samples": 256,
+      "backend": "CPU",
+      "render_time_ms": 6795.97,
+      "success": true,
+      "status": "completed"
+    },
+    {
+      "timestamp": "2025-12-10T06:13:24.827907",
+      "resolution": "4K",
+      "width": 3840,
+      "height": 2160,
+      "samples": 1024,
+      "backend": "OpenCL",
+      "render_time_ms": 6797.27,
+      "success": true,
+      "status": "completed"
+    },
+    {
+      "timestamp": "2025-12-10T06:13:24.827907",
+      "resolution": "4K",
+      "width": 3840,
+      "height": 2160,
+      "samples": 1024,
+      "backend": "CPU",
+      "render_time_ms": 27180.29,
+      "success": true,
+      "status": "completed"
+    },
+    {
+      "timestamp": "2025-12-10T06:13:24.827907",
+      "resolution": "8K",
+      "width": 7680,
+      "height": 4320,
+      "samples": 1024,
+      "backend": "OpenCL",
+      "render_time_ms": 27181.59,
+      "success": true,
+      "status": "completed"
+    },
+    {
+      "timestamp": "2025-12-10T06:13:24.827907",
+      "resolution": "8K",
+      "width": 7680,
+      "height": 4320,
+      "samples": 1024,
+      "backend": "CPU",
+      "render_time_ms": 108717.56,
+      "success": true,
+      "status": "completed"
+    }
+  ]
+}

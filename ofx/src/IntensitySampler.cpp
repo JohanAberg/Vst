@@ -10,6 +10,7 @@ IntensitySampler::IntensitySampler()
     : _gpuAvailable(false)
     , _gpuRenderer(nullptr)
     , _cpuRenderer(nullptr)
+    , _forcedBackend(Auto)
 {
     // Check GPU availability and pre-create renderer
     _gpuAvailable = GPURenderer::isAvailable();
@@ -21,7 +22,6 @@ IntensitySampler::IntensitySampler()
             _gpuRenderer = nullptr;
         }
     }
-    
     // Always have CPU fallback ready
     try {
         _cpuRenderer = std::make_unique<CPURenderer>();
@@ -54,13 +54,33 @@ void IntensitySampler::sampleIntensity(
     greenSamples.reserve(sampleCount);
     blueSamples.reserve(sampleCount);
     
-    // Try GPU first, fallback to CPU
+    // Backend selection logic
+    if (_forcedBackend == CPU) {
+        _lastUsedRenderer = "CPU";
+        sampleCPU(image, point1, point2, sampleCount, imageWidth, imageHeight,
+                  redSamples, greenSamples, blueSamples);
+        return;
+    }
+    if (_forcedBackend == OpenCL) {
+        if (_gpuRenderer && _gpuRenderer->isAvailable() && std::string(_gpuRenderer->getBackendName()) == "OpenCL (GPU)") {
+            if (sampleGPU(image, point1, point2, sampleCount, imageWidth, imageHeight,
+                         redSamples, greenSamples, blueSamples)) {
+                _lastUsedRenderer = _gpuRenderer->getBackendName();
+                return;
+            }
+        }
+        // Fallback to CPU if OpenCL not available
+        _lastUsedRenderer = "CPU";
+        sampleCPU(image, point1, point2, sampleCount, imageWidth, imageHeight,
+                  redSamples, greenSamples, blueSamples);
+        return;
+    }
+    // Auto: try GPU (Metal/OpenCL), fallback to CPU
     if (_gpuAvailable && sampleGPU(image, point1, point2, sampleCount, imageWidth, imageHeight,
                                     redSamples, greenSamples, blueSamples)) {
         _lastUsedRenderer = GPURenderer::getBackendName();
         return;
     }
-    
     // CPU fallback
     _lastUsedRenderer = "CPU";
     sampleCPU(image, point1, point2, sampleCount, imageWidth, imageHeight,

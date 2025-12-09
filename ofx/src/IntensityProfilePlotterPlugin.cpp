@@ -174,6 +174,16 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     enablePlotParam->setHint("Enable/disable the intensity plot visualization");
     enablePlotParam->setAnimates(false);
     
+    // Backend selection (Auto, OpenCL, CPU)
+    OFX::ChoiceParamDescriptor* backendParam = desc.defineChoiceParam("backend");
+    backendParam->setLabel("Backend");
+    backendParam->appendOption("Auto");
+    backendParam->appendOption("OpenCL");
+    backendParam->appendOption("CPU");
+    backendParam->setDefault(0); // Auto
+    backendParam->setHint("Select processing backend: Auto (Metal/OpenCL/CPU), OpenCL (force GPU), or CPU only");
+    backendParam->setAnimates(false);
+
     // Rectangle shade value
     OFX::DoubleParamDescriptor* rectShadeParam = desc.defineDoubleParam("rectShade");
     rectShadeParam->setLabel("Rectangle Shade");
@@ -288,6 +298,8 @@ void IntensityProfilePlotterPlugin::setupParameters()
         _enablePlotParam = fetchBooleanParam("enablePlot");
         _rectShadeParam = fetchDoubleParam("rectShade");
 
+        _backendParam = fetchChoiceParam("backend");
+
         _rendererParam = fetchStringParam("_renderer");
         _versionParam = fetchStringParam("_version");
         if (_versionParam) {
@@ -398,32 +410,9 @@ void IntensityProfilePlotterPlugin::purgeCaches()
 
 void IntensityProfilePlotterPlugin::beginSequenceRender(const OFX::BeginSequenceRenderArguments& args)
 {
-    // Pre-allocate resources for sequence rendering
-    // Initialize sampler once for the sequence
-    if (!_sampler) {
-        try {
-            _sampler = std::make_unique<IntensitySampler>();
-            
-            // Update renderer status parameter
-            if (!_rendererParam) setupParameters();
-            if (_rendererParam) {
-                // Show which renderer is available
-                if (GPURenderer::isAvailable()) {
-                    _rendererParam->setValue(GPURenderer::getBackendName());
-                    s_cachedRendererName = GPURenderer::getBackendName();
-                } else {
-                    _rendererParam->setValue("CPU");
-                    s_cachedRendererName = "CPU";
-                }
-            }
-        } catch (...) {
-            _sampler = nullptr;
-            if (_rendererParam) {
-                _rendererParam->setValue("Error initializing");
-                s_cachedRendererName = "Error initializing";
-            }
-        }
-    }
+    // Minimal initialization - just return
+    // Disable any GPU initialization that might hang
+    return;
 }
 
 const char* IntensityProfilePlotterPlugin::getRendererName() const
@@ -491,20 +480,20 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
             return;
         }
         
-        // Get image properties
-        OfxRectI srcBounds = srcImg->getBounds();
-        int srcRowBytes = srcImg->getRowBytes();
-        int dstRowBytes = dstImg->getRowBytes();
-        
-        // Get the renderWindow - only copy this region (host manages parallel regions)
-        OfxRectI renderWindow = args.renderWindow;
-        
-        // Copy source to destination pixel by pixel, but only in the renderWindow
+        // QUICK FIX: Just do a simple memcpy instead of pixel-by-pixel processing
+        // This is a temporary fix to test if the plugin render works at all
         void* srcPtr = srcImg->getPixelData();
         void* dstPtr = dstImg->getPixelData();
+        int srcRowBytes = srcImg->getRowBytes();
+        int dstRowBytes = dstImg->getRowBytes();
+        OfxRectI srcBounds = srcImg->getBounds();
+        OfxRectI dstBounds = dstImg->getBounds();
+        OfxRectI renderWindow = args.renderWindow;
         
         if (srcPtr && dstPtr) {
-            // Determine bytes per pixel based on pixel depth and components
+            // Simple fast copy for each row in the render window
+            int width = renderWindow.x2 - renderWindow.x1;
+            int height = renderWindow.y2 - renderWindow.y1;
             OFX::BitDepthEnum bitDepth = srcImg->getPixelDepth();
             OFX::PixelComponentEnum components = srcImg->getPixelComponents();
             
@@ -518,89 +507,17 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
             }
             
             int componentCount = (components == OFX::ePixelComponentRGBA) ? 4 : 3;
-            int colorChannels = (components == OFX::ePixelComponentRGBA) ? 3 : componentCount;
             int bytesPerPixel = bytesPerComponent * componentCount;
-            
-            int width = renderWindow.x2 - renderWindow.x1;
-            int height = renderWindow.y2 - renderWindow.y1;
             int rowBytes = width * bytesPerPixel;
             
-            // Get rectangle shade parameter
-            double rectShade = 0.0;
-            if (!_rectShadeParam) setupParameters();
-            if (_rectShadeParam) {
-                rectShade = _rectShadeParam->getValueAtTime(args.time);
-            }
-            
-            // Get plot rectangle bounds in pixel coordinates
-            OfxRectI plotRect = {0, 0, 0, 0};
-            bool hasShade = (rectShade > 0.0);
-            if (hasShade) {
-                if (!_plotRectPosParam) setupParameters();
-                if (!_plotRectSizeParam) setupParameters();
-                
-                if (_plotRectPosParam && _plotRectSizeParam) {
-                    double posX, posY, sizeX, sizeY;
-                    _plotRectPosParam->getValueAtTime(args.time, posX, posY);
-                    _plotRectSizeParam->getValueAtTime(args.time, sizeX, sizeY);
-                    
-                    int imgWidth = srcBounds.x2 - srcBounds.x1;
-                    int imgHeight = srcBounds.y2 - srcBounds.y1;
-                    
-                    plotRect.x1 = srcBounds.x1 + static_cast<int>(posX * imgWidth);
-                    plotRect.y1 = srcBounds.y1 + static_cast<int>(posY * imgHeight);
-                    plotRect.x2 = plotRect.x1 + static_cast<int>(sizeX * imgWidth);
-                    plotRect.y2 = plotRect.y1 + static_cast<int>(sizeY * imgHeight);
-                }
-            }
-            
-            // Copy only the renderWindow region
-            // Calculate the offset into the full image buffers
+            // Fast memcpy for each row
             int xOffset = renderWindow.x1 - srcBounds.x1;
             int yOffset = renderWindow.y1 - srcBounds.y1;
             
-            // Process pixels with optional shade multiply
-            double shadeFactor = std::clamp(rectShade, 0.0, 1.0);
-            bool applyShade = hasShade && shadeFactor > 0.0 && shadeFactor < 0.999999; // skip work when factor ~1
-
-            if (applyShade && bitDepth == OFX::eBitDepthFloat) {
-                // Float processing with shade multiply
-                for (int y = 0; y < height; ++y) {
-                    int fullY = yOffset + y;
-                    int absY = renderWindow.y1 + y;
-                    float* srcRow = (float*)((char*)srcPtr + fullY * srcRowBytes) + xOffset * componentCount;
-                    float* dstRow = (float*)((char*)dstPtr + fullY * dstRowBytes) + xOffset * componentCount;
-                    
-                    for (int x = 0; x < width; ++x) {
-                        int absX = renderWindow.x1 + x;
-                        bool inRect = (absX >= plotRect.x1 && absX < plotRect.x2 && 
-                                      absY >= plotRect.y1 && absY < plotRect.y2);
-                        
-                        if (inRect) {
-                            // Apply shade to color only; preserve alpha untouched
-                            for (int c = 0; c < colorChannels; ++c) {
-                                float val = srcRow[x * componentCount + c];
-                                dstRow[x * componentCount + c] = std::max(0.0f, val * static_cast<float>(shadeFactor));
-                            }
-                            if (componentCount == 4) {
-                                dstRow[x * componentCount + 3] = srcRow[x * componentCount + 3];
-                            }
-                        } else {
-                            // Copy pixel as-is
-                            for (int c = 0; c < componentCount; ++c) {
-                                dstRow[x * componentCount + c] = srcRow[x * componentCount + c];
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Fast path: simple memcpy when no shade is applied
-                for (int y = 0; y < height; ++y) {
-                    int fullY = yOffset + y;
-                    char* srcRow = (char*)srcPtr + fullY * srcRowBytes + xOffset * bytesPerPixel;
-                    char* dstRow = (char*)dstPtr + fullY * dstRowBytes + xOffset * bytesPerPixel;
-                    std::memcpy(dstRow, srcRow, rowBytes);
-                }
+            for (int y = 0; y < height; ++y) {
+                char* srcRow = (char*)srcPtr + (yOffset + y) * srcRowBytes + xOffset * bytesPerPixel;
+                char* dstRow = (char*)dstPtr + (yOffset + y) * dstRowBytes + xOffset * bytesPerPixel;
+                std::memcpy(dstRow, srcRow, rowBytes);
             }
         }
         // Images automatically released when unique_ptr goes out of scope

@@ -1,0 +1,36 @@
+{
+  "timestamp": "2025-12-10T05:57:10.364542",
+  "tests": [
+    {
+      "node": "Ramp",
+      "status": "success",
+      "id": "<NatronEngine.Effect object at 0x0000025e0dd8ed00>"
+    },
+    {
+      "node": "net.sf.openfx.Ramp",
+      "status": "created",
+      "value": "<class 'NatronEngine.Effect'>"
+    },
+    {
+      "node": "fr.inria.openfx.Viewer",
+      "status": "none"
+    },
+    {
+      "node": "fr.inria.openfx.WriteOIIO",
+      "status": "created",
+      "value": "<class 'NatronEngine.Effect'>"
+    },
+    {
+      "node": "fr.inria.openfx.Read",
+      "status": "none"
+    },
+    {
+      "node": "fr.inria.openfx.IntensityProfilePlotter",
+      "status": "none"
+    },
+    {
+      "node": "IntensityProfilePlotter",
+      "status": "none"
+    }
+  ]
+}

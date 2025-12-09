@@ -13,8 +13,20 @@
 class IntensitySampler
 {
 public:
+    enum Backend {
+        Auto = 0,      // Try GPU first, fallback to CPU
+        OpenCL = 1,    // Force OpenCL, fallback to CPU if unavailable
+        CPU = 2        // Force CPU only
+    };
+    
     IntensitySampler();
     ~IntensitySampler();
+    
+    /**
+     * Set the backend to use for sampling (GPU vs CPU)
+     * @param backend Backend mode (Auto, OpenCL, or CPU)
+     */
+    void setBackend(Backend backend) { _forcedBackend = backend; }
     
     /**
      * Sample intensity values along a scan line defined by two normalized points.
@@ -76,6 +88,7 @@ private:
     std::unique_ptr<class GPURenderer> _gpuRenderer;  // Cached GPU renderer
     std::unique_ptr<class CPURenderer> _cpuRenderer;  // Cached CPU renderer
     const char* _lastUsedRenderer = "Not sampled yet";
+    Backend _forcedBackend = Auto;  // Backend selection mode
 };
 
 #endif // INTENSITY_SAMPLER_H
