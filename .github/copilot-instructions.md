@@ -24,6 +24,9 @@ I am a specialized C++ development agent for creating OpenFX (OFX) video plugins
 ## Project Overview
 C++ OpenFX (OFX) video plugin collection targeting DaVinci Resolve, Nuke, and similar hosts. Primary focus: GPU-accelerated image processing with Metal (macOS) and OpenCL (Windows/Linux) backends across multiple platforms and GPU vendors.
 
+OpenFX developer documentation: https://openfx.readthedocs.io/ and "C:\ProgramData\Blackmagic Design\DaVinci Resolve\Support\Developer\OpenFX"
+
+
 ## Architecture
 
 ### Component Hierarchy

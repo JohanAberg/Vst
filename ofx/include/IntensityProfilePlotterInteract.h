@@ -4,6 +4,9 @@
 #include "ofxInteract.h"
 #include "ofxParam.h"
 #include "ofxsInteract.h"
+#include "ofxImageEffect.h"
+
+namespace OFX { class Image; }
 
 class IntensityProfilePlotterPlugin;
 
@@ -55,10 +58,7 @@ private:
     void drawLine(const OFX::DrawArgs& args, double x1, double y1, double x2, double y2);
     void drawRect(const OFX::DrawArgs& args, double rx, double ry, double rw, double rh, bool selected);
     void drawHandle(const OFX::DrawArgs& args, double x, double y, bool selected);
-    
-    // Convert between pixel and normalized coordinates
-    void pixelToNormalized(double px, double py, double& nx, double& ny);
-    void normalizedToPixel(double nx, double ny, double& px, double& py);
+    void drawPlot(const OFX::DrawArgs& args, OFX::Image& src, int imgW, int imgH, double nx1, double ny1, double nx2, double ny2);
 };
 
 // Descriptor for the interact

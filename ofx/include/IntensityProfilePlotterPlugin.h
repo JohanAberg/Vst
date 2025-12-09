@@ -48,6 +48,10 @@ public:
     OFX::RGBAParam* getGreenCurveColorParam() const { return _greenCurveColorParam; }
     OFX::RGBAParam* getBlueCurveColorParam() const { return _blueCurveColorParam; }
     OFX::BooleanParam* getShowReferenceRampParam() const { return _showReferenceRampParam; }
+
+    // Clip accessors for overlay sampling
+    OFX::Clip* getSourceClip() { if(!_srcClip) setupClips(); return _srcClip; }
+    OFX::Clip* getOutputClip() { if(!_dstClip) setupClips(); return _dstClip; }
     
     // Store sampled curve data for interact to render
     void setCurveSamples(const std::vector<float>& red, const std::vector<float>& green, const std::vector<float>& blue)
@@ -89,6 +93,7 @@ private:
     OFX::RGBAParam* _greenCurveColorParam = nullptr;
     OFX::RGBAParam* _blueCurveColorParam = nullptr;
     OFX::BooleanParam* _showReferenceRampParam = nullptr;
+    OFX::StringParam* _versionParam = nullptr;
     
     // Components
     std::unique_ptr<IntensitySampler> _sampler;
