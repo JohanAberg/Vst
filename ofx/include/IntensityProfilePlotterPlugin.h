@@ -78,6 +78,11 @@ public:
 private:
     void setupParameters();
     void setupClips();
+
+    // Thread-safe lazy init
+    mutable std::mutex _initMutex;
+    bool _clipsInitialized = false;
+    bool _paramsInitialized = false;
     
     // Clips
     OFX::Clip* _srcClip = nullptr;

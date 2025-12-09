@@ -40,13 +40,14 @@ void IntensityProfilePlotterPluginFactory::describe(OFX::ImageEffectDescriptor& 
     // Supported pixel depths
     desc.addSupportedBitDepth(OFX::eBitDepthFloat);
     
-    // Set render thread safety - plugin is fully thread-safe
-    desc.setRenderThreadSafety(OFX::eRenderFullySafe);
-    desc.setHostFrameThreading(true);  // Enable host-managed multithreading for better performance
+    // Set render thread safety - conservative instance-safe
+    desc.setRenderThreadSafety(OFX::eRenderInstanceSafe);
+    desc.setHostFrameThreading(false);
     
-#ifdef __APPLE__
-    desc.setSupportsMetalRender(true);
-#endif
+    // Metal render path disabled for stability
+    // #ifdef __APPLE__
+    // desc.setSupportsMetalRender(true);
+    // #endif
     
     // Standard flags
     desc.setSingleInstance(false);
@@ -290,9 +291,15 @@ bool IntensityProfilePlotterPlugin::getRegionOfDefinition(const OFX::RegionOfDef
 {
     // Output ROD matches input ROD
     try {
-        OFX::Clip* srcClip = fetchClip(kOfxImageEffectSimpleSourceClipName);
-        if (srcClip) {
-            rod = srcClip->getRegionOfDefinition(args.time);
+        if (!_clipsInitialized) {
+            std::lock_guard<std::mutex> lock(_initMutex);
+            if (!_clipsInitialized) {
+                setupClips();
+                _clipsInitialized = (_srcClip != nullptr);
+            }
+        }
+        if (_srcClip) {
+            rod = _srcClip->getRegionOfDefinition(args.time);
             return true;
         }
     } catch (...) {}
@@ -303,9 +310,24 @@ bool IntensityProfilePlotterPlugin::getRegionOfDefinition(const OFX::RegionOfDef
 
 void IntensityProfilePlotterPlugin::getClipPreferences(OFX::ClipPreferencesSetter& clipPreferences)
 {
-    // Output matches input - use default behavior
-    // clipPreferences.setOutputFrameVarying(_srcClip->getFrameVarying());
-    // clipPreferences.setOutputHasContinousSamples(_srcClip->hasContinuousSamples());
+    // Initialize clips and parameters in a safe, single-threaded context
+    std::lock_guard<std::mutex> lock(_initMutex);
+    if (!_clipsInitialized) {
+        try {
+            setupClips();
+            _clipsInitialized = true;
+        } catch (...) {
+            _clipsInitialized = false;
+        }
+    }
+    if (!_paramsInitialized) {
+        try {
+            setupParameters();
+            _paramsInitialized = true;
+        } catch (...) {
+            _paramsInitialized = false;
+        }
+    }
 }
 
 void IntensityProfilePlotterPlugin::getRegionsOfInterest(const OFX::RegionsOfInterestArguments& args,
@@ -314,14 +336,22 @@ void IntensityProfilePlotterPlugin::getRegionsOfInterest(const OFX::RegionsOfInt
     // Optimization: Tell the host we only need a thin region around the scan line
     // This can significantly reduce memory and processing for high-res images
     try {
-        // Ensure clips are initialized
-        if (!_srcClip) setupClips();
+        // Ensure clips/params are initialized
+        {
+            std::lock_guard<std::mutex> lock(_initMutex);
+            if (!_clipsInitialized) {
+                setupClips();
+                _clipsInitialized = (_srcClip != nullptr);
+            }
+            if (!_paramsInitialized) {
+                setupParameters();
+                _paramsInitialized = true;
+            }
+        }
+
         if (!_srcClip || !_srcClip->isConnected()) {
             return;  // No source clip, use default ROI
         }
-        
-        if (!_point1Param) setupParameters();
-        if (!_point2Param) setupParameters();
         
         if (_point1Param && _point2Param) {
             // Get scan line endpoints in normalized coordinates
@@ -409,14 +439,20 @@ bool IntensityProfilePlotterPlugin::isIdentity(const OFX::IsIdentityArguments& a
     // Optimization: Skip rendering if plot is disabled
     // This avoids the expensive pixel copy when the overlay isn't even visible
     try {
-        if (!_enablePlotParam) {
-            _enablePlotParam = fetchBooleanParam("enablePlot");
+        {
+            std::lock_guard<std::mutex> lock(_initMutex);
+            if (!_paramsInitialized) {
+                setupParameters();
+                _paramsInitialized = true;
+            }
+            if (!_clipsInitialized) {
+                setupClips();
+                _clipsInitialized = (_srcClip != nullptr);
+            }
         }
+        
         if (_enablePlotParam && !_enablePlotParam->getValueAtTime(args.time)) {
             // Plot disabled - return identity to skip render entirely
-            if (!_srcClip) {
-                _srcClip = fetchClip(kOfxImageEffectSimpleSourceClipName);
-            }
             identityClip = _srcClip;
             identityTime = args.time;
             return true;  // Skip render when plot is off
@@ -432,17 +468,28 @@ bool IntensityProfilePlotterPlugin::isIdentity(const OFX::IsIdentityArguments& a
 void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)    
 {
     try {
-        // Fetch clips
-        OFX::Clip* srcClip = fetchClip(kOfxImageEffectSimpleSourceClipName);
-        OFX::Clip* dstClip = fetchClip(kOfxImageEffectOutputClipName);
-        
+        // Ensure clips/params are initialized once in a thread-safe manner
+        {
+            std::lock_guard<std::mutex> lock(_initMutex);
+            if (!_clipsInitialized) {
+                setupClips();
+                _clipsInitialized = (_srcClip != nullptr);
+            }
+            if (!_paramsInitialized) {
+                setupParameters();
+                _paramsInitialized = true;
+            }
+        }
+
+        OFX::Clip* srcClip = _srcClip;
+        OFX::Clip* dstClip = _dstClip;
         if (!srcClip || !dstClip) {
             return;
         }
         
-        // Fetch images - use unique_ptr for automatic cleanup
-        std::unique_ptr<OFX::Image> srcImg(srcClip->fetchImage(args.time));
-        std::unique_ptr<OFX::Image> dstImg(dstClip->fetchImage(args.time));
+        // Fetch images - OFX manages lifetime; do not wrap in smart pointers
+        OFX::Image* srcImg = srcClip->fetchImage(args.time);
+        OFX::Image* dstImg = dstClip->fetchImage(args.time);
         
         if (!srcImg || !dstImg) {
             return;
@@ -560,7 +607,7 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
                 }
             }
         }
-        // Images automatically released when unique_ptr goes out of scope
+        // OFX framework manages image lifetime
     } catch (...) {
         // Silently catch exceptions - don't want to crash host
     }
