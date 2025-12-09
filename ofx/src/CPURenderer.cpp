@@ -36,6 +36,8 @@ void CPURenderer::sampleIntensity(
         return;
     }
     
+    int rowBytes = image->getRowBytes();
+    
     OFX::PixelComponentEnum components = image->getPixelComponents();
     int componentCount = (components == OFX::ePixelComponentRGBA) ? 4 : 3;
     
@@ -59,7 +61,7 @@ void CPURenderer::sampleIntensity(
         
         // Bilinear sample
         float red, green, blue;
-        bilinearSample(imageData, imageWidth, imageHeight, componentCount, x, y, red, green, blue);
+        bilinearSample(imageData, rowBytes, imageWidth, imageHeight, componentCount, x, y, red, green, blue);
         
         redSamples.push_back(red);
         greenSamples.push_back(green);
@@ -69,6 +71,7 @@ void CPURenderer::sampleIntensity(
 
 void CPURenderer::bilinearSample(
     const float* imageData,
+    int rowBytes,
     int imageWidth,
     int imageHeight,
     int componentCount,
@@ -87,10 +90,12 @@ void CPURenderer::bilinearSample(
     
     // Sample four corners
     auto samplePixel = [&](int px, int py, float& r, float& g, float& b) {
-        int index = (py * imageWidth + px) * componentCount;
-        r = imageData[index + 0];
-        g = imageData[index + 1];
-        b = imageData[index + 2];
+        // Use rowBytes for correct stride
+        const float* row = (const float*)((const char*)imageData + py * rowBytes);
+        int index = px * componentCount;
+        r = row[index + 0];
+        g = row[index + 1];
+        b = row[index + 2];
     };
     
     float r00, g00, b00, r10, g10, b10, r01, g01, b01, r11, g11, b11;

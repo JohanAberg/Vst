@@ -133,10 +133,17 @@ if(PLATFORM_MACOS)
     add_library(IntensityProfilePlotter MODULE ${PLUGIN_SOURCES})
     set_target_properties(IntensityProfilePlotter PROPERTIES
         BUNDLE ON
-        BUNDLE_EXTENSION "ofx"
+        BUNDLE_EXTENSION "ofx.bundle"
         PREFIX ""
-        SUFFIX ".ofx"
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/Info.plist
+    )
+    
+    # Post-build: rename the binary inside the bundle to have .ofx extension
+    # This is required for Resolve to recognize the plugin
+    add_custom_command(TARGET IntensityProfilePlotter POST_BUILD
+        COMMAND mv "$<TARGET_BUNDLE_DIR:IntensityProfilePlotter>/Contents/MacOS/IntensityProfilePlotter" 
+                   "$<TARGET_BUNDLE_DIR:IntensityProfilePlotter>/Contents/MacOS/IntensityProfilePlotter.ofx"
+        COMMENT "Renaming binary to IntensityProfilePlotter.ofx"
     )
     
     # Add Metal library if it will be generated

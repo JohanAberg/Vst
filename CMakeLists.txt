@@ -16,12 +16,15 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=unused-but-set-variable")
 
 # Build options for each plugin
 option(BUILD_OFX_PLUGIN "Build the Intensity Profile Plotter OFX plugin" ON)
-option(BUILD_OFX_MINIMAL "Build the minimal test OFX plugin" ON)
-option(BUILD_VST3_CIRCUIT_SATURATION "Build the Analog Circuit Saturation VST3 plugin" ON)
-option(BUILD_VST3_ANALOG_SATURATION "Build the Analog Saturation VST3 plugin (JUCE-based)" ON)
+# option(BUILD_OFX_MINIMAL "Build the minimal test OFX plugin" ON)
+# option(BUILD_VST3_CIRCUIT_SATURATION "Build the Analog Circuit Saturation VST3 plugin" ON)
+# option(BUILD_VST3_ANALOG_SATURATION "Build the Analog Saturation VST3 plugin (JUCE-based)" ON)
 
 # OFX SDK path (can be set from command line: -DOFX_SDK_PATH=/path/to/ofx-sdk)
-set(OFX_SDK_PATH "C:/Users/aberg/Documents/openfx" CACHE PATH "Path to OpenFX SDK")
+# Commented out - let ofx/CMakeLists.txt handle the default
+# set(OFX_SDK_PATH "C:/Users/aberg/openfx" CACHE PATH "Path to OpenFX SDK")
+set(OFX_SDK_PATH "/Users/johan/openfx" CACHE PATH "Path to OpenFX SDK")
+
 
 # OFX Plugin
 if(BUILD_OFX_PLUGIN)
@@ -41,22 +44,22 @@ if(BUILD_OFX_PLUGIN)
     endif()
 endif()
 
-# VST3 Plugin 1: Analog Circuit Saturation (VST3 SDK)
-if(BUILD_VST3_CIRCUIT_SATURATION)
-    message(STATUS "Building VST3 plugin: Analog Circuit Saturation")
-    add_subdirectory(vst_codex)
-endif()
+# # VST3 Plugin 1: Analog Circuit Saturation (VST3 SDK)
+# if(BUILD_VST3_CIRCUIT_SATURATION)
+#     message(STATUS "Building VST3 plugin: Analog Circuit Saturation")
+#     add_subdirectory(vst_codex)
+# endif()
 
-# VST3 Plugin 2: Analog Saturation (JUCE-based)
-if(BUILD_VST3_ANALOG_SATURATION)
-    message(STATUS "Building VST3 plugin: Analog Saturation (JUCE-based)")
-    # Check if JUCE exists
-    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/JUCE")
-        message(WARNING "JUCE not found. Run ./setup_juce.sh to download JUCE framework.")
-        message(STATUS "Skipping JUCE-based VST3 plugin build.")
-        set(BUILD_VST3_ANALOG_SATURATION OFF)
-    else()
-        # Create a separate CMakeLists for the JUCE-based plugin
-        add_subdirectory(vst_juce)
-    endif()
-endif()
+# # VST3 Plugin 2: Analog Saturation (JUCE-based)
+# if(BUILD_VST3_ANALOG_SATURATION)
+#     message(STATUS "Building VST3 plugin: Analog Saturation (JUCE-based)")
+#     # Check if JUCE exists
+#     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/JUCE")
+#         message(WARNING "JUCE not found. Run ./setup_juce.sh to download JUCE framework.")
+#         message(STATUS "Skipping JUCE-based VST3 plugin build.")
+#         set(BUILD_VST3_ANALOG_SATURATION OFF)
+#     else()
+#         # Create a separate CMakeLists for the JUCE-based plugin
+#         add_subdirectory(vst_juce)
+#     endif()
+# endif()

@@ -43,12 +43,12 @@ public:
 private:
     void bilinearSample(
         const float* imageData,
+        int rowBytes,
         int imageWidth,
         int imageHeight,
         int componentCount,
         double x, double y,
-        float& red, float& green, float& blue
-    );
+        float& red, float& green, float& blue);
 };
 
 #endif // CPU_RENDERER_H

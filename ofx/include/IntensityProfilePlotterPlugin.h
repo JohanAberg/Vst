@@ -7,6 +7,8 @@
 #include "ofxsImageEffect.h"
 #include "ofxsInteract.h"
 #include <memory>
+#include <vector>
+#include <mutex>
 
 class IntensityProfilePlotterInteract;
 class IntensitySampler;
@@ -40,44 +42,66 @@ public:
     OFX::DoubleParam* getPlotHeightParam() const { return _plotHeightParam; }
     OFX::Double2DParam* getPlotRectPosParam() const { return _plotRectPosParam; }
     OFX::Double2DParam* getPlotRectSizeParam() const { return _plotRectSizeParam; }
+    OFX::DoubleParam* getWhitePointParam() const { return _whitePointParam; }
     OFX::IntParam* getLineWidthParam() const { return _lineWidthParam; }
     OFX::RGBAParam* getRedCurveColorParam() const { return _redCurveColorParam; }
     OFX::RGBAParam* getGreenCurveColorParam() const { return _greenCurveColorParam; }
     OFX::RGBAParam* getBlueCurveColorParam() const { return _blueCurveColorParam; }
     OFX::BooleanParam* getShowReferenceRampParam() const { return _showReferenceRampParam; }
+    
+    // Store sampled curve data for interact to render
+    void setCurveSamples(const std::vector<float>& red, const std::vector<float>& green, const std::vector<float>& blue)
+    {
+        std::lock_guard<std::mutex> lock(_sampleMutex);
+        _redSamples = red;
+        _greenSamples = green;
+        _blueSamples = blue;
+    }
+    
+    void getCurveSamples(std::vector<float>& red, std::vector<float>& green, std::vector<float>& blue) const
+    {
+        std::lock_guard<std::mutex> lock(_sampleMutex);
+        red = _redSamples;
+        green = _greenSamples;
+        blue = _blueSamples;
+    }
 
 private:
     void setupParameters();
     void setupClips();
-    void drawLine(float* buffer, int width, int height, int nComp, int rowBytes,
-                  int x1, int y1, int x2, int y2, float r, float g, float b, int lineWidth,
-                  int clipX, int clipY, int clipW, int clipH);
     
     // Clips
-    OFX::Clip* _srcClip;
-    OFX::Clip* _dstClip;
-    OFX::Clip* _auxClip;
+    OFX::Clip* _srcClip = nullptr;
+    OFX::Clip* _dstClip = nullptr;
+    OFX::Clip* _auxClip = nullptr;
     
     // Parameters
-    OFX::Double2DParam* _point1Param;      // Normalized coordinates [0-1, 0-1]
-    OFX::Double2DParam* _point2Param;      // Normalized coordinates [0-1, 0-1]
-    OFX::ChoiceParam* _dataSourceParam;    // 0=Input Clip, 1=Auxiliary Clip, 2=Built-in Ramp
-    OFX::IntParam* _sampleCountParam;       // Number of samples along scan line
-    OFX::DoubleParam* _plotHeightParam;    // Height of plot overlay (normalized)
-    OFX::Double2DParam* _plotRectPosParam;  // Top-left normalized position of plot rect
-    OFX::Double2DParam* _plotRectSizeParam; // Normalized size of plot rect
-    OFX::IntParam* _lineWidthParam;         // Line width in pixels
-    OFX::RGBAParam* _redCurveColorParam;
-    OFX::RGBAParam* _greenCurveColorParam;
-    OFX::RGBAParam* _blueCurveColorParam;
-    OFX::BooleanParam* _showReferenceRampParam;
+    OFX::Double2DParam* _point1Param = nullptr;      // Normalized coordinates [0-1, 0-1]
+    OFX::Double2DParam* _point2Param = nullptr;      // Normalized coordinates [0-1, 0-1]
+    OFX::ChoiceParam* _dataSourceParam = nullptr;    // 0=Input Clip, 1=Auxiliary Clip, 2=Built-in Ramp
+    OFX::IntParam* _sampleCountParam = nullptr;       // Number of samples along scan line
+    OFX::DoubleParam* _plotHeightParam = nullptr;    // Height of plot overlay (normalized)
+    OFX::Double2DParam* _plotRectPosParam = nullptr;  // Top-left normalized position of plot rect
+    OFX::Double2DParam* _plotRectSizeParam = nullptr; // Normalized size of plot rect
+    OFX::DoubleParam* _whitePointParam = nullptr;     // Map this intensity to 1.0
+    OFX::IntParam* _lineWidthParam = nullptr;         // Line width in pixels
+    OFX::RGBAParam* _redCurveColorParam = nullptr;
+    OFX::RGBAParam* _greenCurveColorParam = nullptr;
+    OFX::RGBAParam* _blueCurveColorParam = nullptr;
+    OFX::BooleanParam* _showReferenceRampParam = nullptr;
     
     // Components
     std::unique_ptr<IntensitySampler> _sampler;
     std::unique_ptr<ProfilePlotter> _plotter;
     
     // Interact (OSM)
-    IntensityProfilePlotterInteract* _interact;
+    IntensityProfilePlotterInteract* _interact = nullptr;
+    
+    // Curve sample cache for interact rendering
+    mutable std::mutex _sampleMutex;
+    std::vector<float> _redSamples;
+    std::vector<float> _greenSamples;
+    std::vector<float> _blueSamples;
 };
 
 #endif // INTENSITY_PROFILE_PLOTTER_PLUGIN_H

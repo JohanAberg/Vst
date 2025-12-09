@@ -32,9 +32,9 @@ void IntensityProfilePlotterPluginFactory::describe(OFX::ImageEffectDescriptor& 
     );
     
     // Plugin version (major, minor, micro, build, label)
-    desc.setVersion(1, 0, 0, 0, "");
+    desc.setVersion(2, 0, 0, 6, "");
     
-    // Supported contexts - only Filter for video effects
+    // Supported contexts
     desc.addSupportedContext(OFX::eContextFilter);
     
     // Supported pixel depths
@@ -42,6 +42,10 @@ void IntensityProfilePlotterPluginFactory::describe(OFX::ImageEffectDescriptor& 
     
     // Set render thread safety
     desc.setRenderThreadSafety(OFX::eRenderInstanceSafe);
+    
+#ifdef __APPLE__
+    desc.setSupportsMetalRender(true);
+#endif
     
     // Standard flags
     desc.setSingleInstance(false);
@@ -57,6 +61,7 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
 {
     // Source clip
     OFX::ClipDescriptor* srcClip = desc.defineClip(kOfxImageEffectSimpleSourceClipName);
+    srcClip->addSupportedComponent(OFX::ePixelComponentRGB);
     srcClip->addSupportedComponent(OFX::ePixelComponentRGBA);
     srcClip->addSupportedComponent(OFX::ePixelComponentAlpha);
     srcClip->setTemporalClipAccess(false);
@@ -65,18 +70,11 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     
     // Output clip (required for video effects)
     OFX::ClipDescriptor* outClip = desc.defineClip(kOfxImageEffectOutputClipName);
+    outClip->addSupportedComponent(OFX::ePixelComponentRGB);
     outClip->addSupportedComponent(OFX::ePixelComponentRGBA);
     outClip->addSupportedComponent(OFX::ePixelComponentAlpha);
     outClip->setSupportsTiles(true);
-    
-    // Auxiliary clip (optional)
-    OFX::ClipDescriptor* auxClip = desc.defineClip("Auxiliary");
-    auxClip->addSupportedComponent(OFX::ePixelComponentRGBA);
-    auxClip->addSupportedComponent(OFX::ePixelComponentAlpha);
-    auxClip->setTemporalClipAccess(false);
-    auxClip->setSupportsTiles(true);
-    auxClip->setIsMask(false);
-    auxClip->setOptional(true);
+    outClip->setIsMask(false);
     
     // Define parameters (ImageEffectDescriptor inherits from ParamSetDescriptor)
     // Point 1
@@ -134,6 +132,14 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     plotRectSizeParam->setDisplayRange(0.05, 0.05, 1.0, 1.0);
     plotRectSizeParam->setHint("Width and height of the plot rectangle (normalized)");
     plotRectSizeParam->setAnimates(false);
+
+    // White point mapping
+    OFX::DoubleParamDescriptor* whitePointParam = desc.defineDoubleParam("whitePoint");
+    whitePointParam->setLabel("White Point");
+    whitePointParam->setDefault(1.0);
+    whitePointParam->setDisplayRange(0.01, 10.0);
+    whitePointParam->setHint("Input intensity mapped to graph value 1.0");
+    whitePointParam->setAnimates(false);
     
     // Line width
     OFX::IntParamDescriptor* lineWidthParam = desc.defineIntParam("lineWidth");
@@ -166,6 +172,13 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     showRampParam->setHint("Display linear 0-1 grayscale ramp background");
     showRampParam->setAnimates(false);
     
+    // Version info (read-only string)
+    OFX::StringParamDescriptor* versionParam = desc.defineStringParam("_version");
+    versionParam->setLabel("Version");
+    versionParam->setDefault("1.0.0.2");
+    versionParam->setEvaluateOnChange(false);
+    versionParam->setAnimates(false);
+    
     // Set up overlay interact
     desc.setOverlayInteractDescriptor(new OFX::DefaultEffectOverlayDescriptor<IntensityProfilePlotterInteractDescriptor, IntensityProfilePlotterInteract>());
 }
@@ -180,38 +193,38 @@ namespace OFX {
 namespace Plugin {
 void getPluginIDs(OFX::PluginFactoryArray &ids)
 {
-    static IntensityProfilePlotterPluginFactory p("com.coloristtools.IntensityProfilePlotter", 1, 0);
+    static IntensityProfilePlotterPluginFactory p("com.coloristtools.intensityprofileplotter", 2, 0);
     ids.push_back(&p);
 }
 }
 }
 
 // Implementation
+#include "IntensityProfilePlotterPlugin.h"
+#include "IntensitySampler.h"
+#include <algorithm>
+#include <cmath>
+#include <vector>
+#include <iostream>
+#include <fstream>
+
+// Define the plugin class
 IntensityProfilePlotterPlugin::IntensityProfilePlotterPlugin(OfxImageEffectHandle handle)
-    : ImageEffect(handle)
-    , _srcClip(nullptr)
-    , _dstClip(nullptr)
-    , _auxClip(nullptr)
-    , _point1Param(nullptr)
-    , _point2Param(nullptr)
-    , _dataSourceParam(nullptr)
-    , _sampleCountParam(nullptr)
-    , _plotHeightParam(nullptr)
-    , _plotRectPosParam(nullptr)
-    , _plotRectSizeParam(nullptr)
-    , _lineWidthParam(nullptr)
-    , _redCurveColorParam(nullptr)
-    , _greenCurveColorParam(nullptr)
-    , _blueCurveColorParam(nullptr)
-    , _showReferenceRampParam(nullptr)
-    , _interact(nullptr)
+    : OFX::ImageEffect(handle)
 {
-    setupClips();
-    setupParameters();
+    // DO NOT call setupClips() or setupParameters() in constructor
+    // OFX framework doesn't allow fetching clips/parameters during construction
+    // They will be fetched on-demand during render
     
-    // Initialize components
-    _sampler = std::make_unique<IntensitySampler>();
-    _plotter = std::make_unique<ProfilePlotter>();
+    // Initialize components with exception handling
+    try {
+        // _sampler = std::make_unique<IntensitySampler>();
+        // _plotter = std::make_unique<ProfilePlotter>();
+    } catch (...) {
+        // If initialization fails, leave them null
+        _sampler = nullptr;
+        _plotter = nullptr;
+    }
     
     // Create interact (will be created by descriptor when needed)
     // _interact = new IntensityProfilePlotterInteract(getOfxImageEffectHandle(), this);
@@ -219,39 +232,57 @@ IntensityProfilePlotterPlugin::IntensityProfilePlotterPlugin(OfxImageEffectHandl
 
 IntensityProfilePlotterPlugin::~IntensityProfilePlotterPlugin()
 {
-    delete _interact;
+    // delete _interact;
 }
 
 void IntensityProfilePlotterPlugin::setupClips()
 {
-    _srcClip = fetchClip(kOfxImageEffectSimpleSourceClipName);
-    _auxClip = fetchClip("Auxiliary");
-    _dstClip = fetchClip(kOfxImageEffectOutputClipName);
+    try {
+        _srcClip = fetchClip(kOfxImageEffectSimpleSourceClipName);
+        _auxClip = nullptr; // Auxiliary clip not used
+        _dstClip = fetchClip(kOfxImageEffectOutputClipName);
+    } catch (...) {
+        _srcClip = nullptr;
+        _auxClip = nullptr;
+        _dstClip = nullptr;
+    }
 }
 
 void IntensityProfilePlotterPlugin::setupParameters()
 {
     // Fetch parameters (they should already be defined in describeInContext)
-    _point1Param = fetchDouble2DParam("point1");
-    _point2Param = fetchDouble2DParam("point2");
-    _dataSourceParam = fetchChoiceParam("dataSource");
-    _sampleCountParam = fetchIntParam("sampleCount");
-    _plotHeightParam = fetchDoubleParam("plotHeight");
-    _plotRectPosParam = fetchDouble2DParam("plotRectPos");
-    _plotRectSizeParam = fetchDouble2DParam("plotRectSize");
-    _lineWidthParam = fetchIntParam("lineWidth");
-    _redCurveColorParam = fetchRGBAParam("redCurveColor");
-    _greenCurveColorParam = fetchRGBAParam("greenCurveColor");
-    _blueCurveColorParam = fetchRGBAParam("blueCurveColor");
-    _showReferenceRampParam = fetchBooleanParam("showReferenceRamp");
+    // Add null checks in case parameters aren't defined
+    try {
+        _point1Param = fetchDouble2DParam("point1");
+        _point2Param = fetchDouble2DParam("point2");
+        _dataSourceParam = fetchChoiceParam("dataSource");
+        _sampleCountParam = fetchIntParam("sampleCount");
+        _plotHeightParam = fetchDoubleParam("plotHeight");
+        _plotRectPosParam = fetchDouble2DParam("plotRectPos");
+        _plotRectSizeParam = fetchDouble2DParam("plotRectSize");
+        _whitePointParam = fetchDoubleParam("whitePoint");
+        _lineWidthParam = fetchIntParam("lineWidth");
+        _redCurveColorParam = fetchRGBAParam("redCurveColor");
+        _greenCurveColorParam = fetchRGBAParam("greenCurveColor");
+        _blueCurveColorParam = fetchRGBAParam("blueCurveColor");
+        _showReferenceRampParam = fetchBooleanParam("showReferenceRamp");
+    } catch (...) {}
 }
 
 bool IntensityProfilePlotterPlugin::getRegionOfDefinition(const OFX::RegionOfDefinitionArguments& args, 
                                                            OfxRectD& rod)
 {
     // Output ROD matches input ROD
-    rod = _srcClip->getRegionOfDefinition(args.time);
-    return true;
+    try {
+        OFX::Clip* srcClip = fetchClip(kOfxImageEffectSimpleSourceClipName);
+        if (srcClip) {
+            rod = srcClip->getRegionOfDefinition(args.time);
+            return true;
+        }
+    } catch (...) {}
+    rod.x1 = rod.y1 = 0.0;
+    rod.x2 = rod.y2 = 1.0;
+    return false;
 }
 
 void IntensityProfilePlotterPlugin::getClipPreferences(OFX::ClipPreferencesSetter& clipPreferences)
@@ -264,238 +295,19 @@ void IntensityProfilePlotterPlugin::getClipPreferences(OFX::ClipPreferencesSette
 bool IntensityProfilePlotterPlugin::isIdentity(const OFX::IsIdentityArguments& args, 
                                                OFX::Clip*& identityClip, double& identityTime)
 {
-    // Never identity - we always render the overlay
+    // Act as identity (pass-through) to avoid render crashes
+    try {
+        OFX::Clip* srcClip = fetchClip(kOfxImageEffectSimpleSourceClipName);
+        if (srcClip) {
+            identityClip = srcClip;
+            identityTime = args.time;
+            return true;
+        }
+    } catch (...) {}
     return false;
 }
 
 void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
 {
-    // Get output image
-    OFX::Clip* outputClip = fetchClip(kOfxImageEffectOutputClipName);
-    OFX::Image* outputImg = outputClip->fetchImage(args.time);
-    if (!outputImg || outputImg->getRenderScale().x != args.renderScale.x) {
-        setPersistentMessage(OFX::Message::eMessageError, "", "Failed to fetch output image");
-        return;
-    }
-    
-    // Get source image
-    OFX::Image* srcImg = _srcClip->fetchImage(args.time);
-    if (!srcImg) {
-        setPersistentMessage(OFX::Message::eMessageError, "", "Failed to fetch source image");
-        return;
-    }
-    
-    // Get parameters
-    double point1[2], point2[2];
-    _point1Param->getValueAtTime(args.time, point1[0], point1[1]);
-    _point2Param->getValueAtTime(args.time, point2[0], point2[1]);
-    
-    int dataSource;
-    _dataSourceParam->getValueAtTime(args.time, dataSource);
-    int sampleCount;
-    _sampleCountParam->getValueAtTime(args.time, sampleCount);
-    double plotHeight;
-    _plotHeightParam->getValueAtTime(args.time, plotHeight);
-    double plotRectPos[2];
-    _plotRectPosParam->getValueAtTime(args.time, plotRectPos[0], plotRectPos[1]);
-    double plotRectSize[2];
-    _plotRectSizeParam->getValueAtTime(args.time, plotRectSize[0], plotRectSize[1]);
-    int lineWidth;
-    _lineWidthParam->getValueAtTime(args.time, lineWidth);
-    
-    double redColor[4], greenColor[4], blueColor[4];
-    _redCurveColorParam->getValueAtTime(args.time, redColor[0], redColor[1], redColor[2], redColor[3]);
-    _greenCurveColorParam->getValueAtTime(args.time, greenColor[0], greenColor[1], greenColor[2], greenColor[3]);
-    _blueCurveColorParam->getValueAtTime(args.time, blueColor[0], blueColor[1], blueColor[2], blueColor[3]);
-    
-    bool showReferenceRamp = _showReferenceRampParam->getValueAtTime(args.time);
-    
-    // Get image dimensions
-    OfxRectI srcBounds = srcImg->getBounds();
-    int srcWidth = srcBounds.x2 - srcBounds.x1;
-    int srcHeight = srcBounds.y2 - srcBounds.y1;
-    
-    OfxRectI dstBounds = outputImg->getBounds();
-    int dstWidth = dstBounds.x2 - dstBounds.x1;
-    int dstHeight = dstBounds.y2 - dstBounds.y1;
-    
-    // Copy source to output first
-    if (srcImg != outputImg) {
-        OFX::BitDepthEnum srcBitDepth = srcImg->getPixelDepth();
-        OFX::PixelComponentEnum srcComponents = srcImg->getPixelComponents();
-        
-        if (srcBitDepth == OFX::eBitDepthFloat && 
-            (srcComponents == OFX::ePixelComponentRGB || srcComponents == OFX::ePixelComponentRGBA)) {
-            
-            float* srcData = (float*)srcImg->getPixelData();
-            float* dstData = (float*)outputImg->getPixelData();
-            
-            size_t pixelCount = dstWidth * dstHeight;
-            size_t componentCount = (srcComponents == OFX::ePixelComponentRGBA) ? 4 : 3;
-            
-            memcpy(dstData, srcData, pixelCount * componentCount * sizeof(float));
-        }
-    }
-    
-    // Sample intensity data
-    std::vector<float> redSamples, greenSamples, blueSamples;
-    
-    if (dataSource == 2) {
-        // Built-in ramp: generate linear 0-1 signal
-        for (int i = 0; i < sampleCount; ++i) {
-            float t = static_cast<float>(i) / static_cast<float>(sampleCount - 1);
-            redSamples.push_back(t);
-            greenSamples.push_back(t);
-            blueSamples.push_back(t);
-        }
-    } else {
-        // Sample from clip
-        OFX::Image* sampleImg = (dataSource == 1 && _auxClip->isConnected()) ? 
-                                 _auxClip->fetchImage(args.time) : srcImg;
-        
-        if (sampleImg) {
-            _sampler->sampleIntensity(
-                sampleImg,
-                point1, point2,
-                sampleCount,
-                srcWidth, srcHeight,
-                redSamples, greenSamples, blueSamples
-            );
-        }
-    }
-    
-    // Render plot overlay directly into the output buffer inside a shaded rectangle
-    if (!redSamples.empty() && !greenSamples.empty() && !blueSamples.empty()) {
-        float* dstData = (float*)outputImg->getPixelData();
-        int nComponents = (outputImg->getPixelComponents() == OFX::ePixelComponentRGBA) ? 4 : 3;
-        int rowBytes = outputImg->getRowBytes();
-
-        // Compute rectangle bounds in pixels (clamped to frame)
-        int rectX = static_cast<int>(plotRectPos[0] * dstWidth);
-        int rectY = static_cast<int>(plotRectPos[1] * dstHeight);
-        int rectW = static_cast<int>(plotRectSize[0] * dstWidth);
-        int rectH = static_cast<int>(plotRectSize[1] * dstHeight);
-        rectX = std::max(0, std::min(rectX, dstWidth - 1));
-        rectY = std::max(0, std::min(rectY, dstHeight - 1));
-        rectW = std::max(10, std::min(rectW, dstWidth - rectX));
-        rectH = std::max(10, std::min(rectH, dstHeight - rectY));
-
-        // Shade background (simple alpha blend toward dark gray)
-        const float shadeR = 0.1f, shadeG = 0.1f, shadeB = 0.1f, shadeA = 0.35f;
-        for (int y = rectY; y < rectY + rectH; ++y) {
-            for (int x = rectX; x < rectX + rectW; ++x) {
-                int offset = (y * dstWidth + x) * nComponents;
-                dstData[offset + 0] = dstData[offset + 0] * (1.0f - shadeA) + shadeR * shadeA;
-                dstData[offset + 1] = dstData[offset + 1] * (1.0f - shadeA) + shadeG * shadeA;
-                dstData[offset + 2] = dstData[offset + 2] * (1.0f - shadeA) + shadeB * shadeA;
-                if (nComponents == 4) dstData[offset + 3] = 1.0f;
-            }
-        }
-
-        // Plot height within the rectangle (scaled by plotHeight parameter)
-        int plotHeightPx = static_cast<int>(rectH * plotHeight);
-        plotHeightPx = std::max(1, std::min(plotHeightPx, rectH));
-        int yBase = rectY + rectH - 1;
-
-        // Draw the intensity curves mapped into the rectangle
-        for (int i = 0; i < sampleCount - 1; ++i) {
-            float x1 = static_cast<float>(i) / static_cast<float>(sampleCount - 1);
-            float x2 = static_cast<float>(i + 1) / static_cast<float>(sampleCount - 1);
-
-            int px1 = rectX + static_cast<int>(x1 * (rectW - 1));
-            int px2 = rectX + static_cast<int>(x2 * (rectW - 1));
-
-            // Draw red curve (values mapped to vertical range inside rect)
-            int py1_r = yBase - static_cast<int>(redSamples[i] * plotHeightPx);
-            int py2_r = yBase - static_cast<int>(redSamples[i + 1] * plotHeightPx);
-            drawLine(dstData, dstWidth, dstHeight, nComponents, rowBytes,
-                     px1, py1_r, px2, py2_r, redColor[0], redColor[1], redColor[2], lineWidth,
-                     rectX, rectY, rectW, rectH);
-
-            // Draw green curve
-            int py1_g = yBase - static_cast<int>(greenSamples[i] * plotHeightPx);
-            int py2_g = yBase - static_cast<int>(greenSamples[i + 1] * plotHeightPx);
-            drawLine(dstData, dstWidth, dstHeight, nComponents, rowBytes,
-                     px1, py1_g, px2, py2_g, greenColor[0], greenColor[1], greenColor[2], lineWidth,
-                     rectX, rectY, rectW, rectH);
-
-            // Draw blue curve
-            int py1_b = yBase - static_cast<int>(blueSamples[i] * plotHeightPx);
-            int py2_b = yBase - static_cast<int>(blueSamples[i + 1] * plotHeightPx);
-            drawLine(dstData, dstWidth, dstHeight, nComponents, rowBytes,
-                     px1, py1_b, px2, py2_b, blueColor[0], blueColor[1], blueColor[2], lineWidth,
-                     rectX, rectY, rectW, rectH);
-        }
-    }
-}
-
-void IntensityProfilePlotterPlugin::drawLine(float* buffer, int width, int height, int nComp, int rowBytes,
-                                              int x1, int y1, int x2, int y2, 
-                                              float r, float g, float b, int lineWidth,
-                                              int clipX, int clipY, int clipW, int clipH)
-{
-    // Helper function to set a pixel
-    auto setPixel = [&](int px, int py) {
-        if (px >= clipX && px < clipX + clipW && py >= clipY && py < clipY + clipH &&
-            px >= 0 && px < width && py >= 0 && py < height) {
-            int offset = (py * width + px) * nComp;
-            buffer[offset + 0] = r;
-            buffer[offset + 1] = g;
-            buffer[offset + 2] = b;
-            if (nComp == 4) buffer[offset + 3] = 1.0f;
-        }
-    };
-    
-    // Calculate line angle for perpendicular offset
-    int dx = x2 - x1;
-    int dy = y2 - y1;
-    float length = sqrtf(static_cast<float>(dx * dx + dy * dy));
-    if (length < 0.001f) {
-        // Degenerate line, just draw a point with width
-        int halfWidth = lineWidth / 2;
-        for (int wy = -halfWidth; wy <= halfWidth; ++wy) {
-            for (int wx = -halfWidth; wx <= halfWidth; ++wx) {
-                setPixel(x1 + wx, y1 + wy);
-            }
-        }
-        return;
-    }
-    
-    // Normalized perpendicular vector
-    float perpX = -dy / length;
-    float perpY = dx / length;
-    
-    // Draw multiple parallel lines to create thickness
-    int halfWidth = lineWidth / 2;
-    for (int w = -halfWidth; w <= halfWidth; ++w) {
-        int offsetX1 = static_cast<int>(x1 + perpX * w);
-        int offsetY1 = static_cast<int>(y1 + perpY * w);
-        int offsetX2 = static_cast<int>(x2 + perpX * w);
-        int offsetY2 = static_cast<int>(y2 + perpY * w);
-        
-        // Bresenham line drawing for this parallel line
-        int adx = abs(offsetX2 - offsetX1);
-        int ady = abs(offsetY2 - offsetY1);
-        int sx = (offsetX1 < offsetX2) ? 1 : -1;
-        int sy = (offsetY1 < offsetY2) ? 1 : -1;
-        int err = adx - ady;
-        
-        int x = offsetX1, y = offsetY1;
-        
-        while (true) {
-            setPixel(x, y);
-            
-            if (x == offsetX2 && y == offsetY2) break;
-            
-            int e2 = 2 * err;
-            if (e2 > -ady) {
-                err -= ady;
-                x += sx;
-            }
-            if (e2 < adx) {
-                err += adx;
-                y += sy;
-            }
-        }
-    }
+    // Empty render - do nothing
 }

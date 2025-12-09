@@ -185,6 +185,24 @@ void IntensityProfilePlotterInteract::drawRect(const OFX::DrawArgs& args, double
     glPushAttrib(GL_ALL_ATTRIB_BITS);
     glDisable(GL_TEXTURE_2D);
 
+    // DEBUG: Draw red square at fixed screen position (200, 200) to confirm drawRect executes
+    glColor3f(1.0f, 0.0f, 0.0f);
+    glBegin(GL_QUADS);
+    glVertex2d(0.1, 0.8);
+    glVertex2d(0.8, 0.8);
+    glVertex2d(0.8, .2);
+    glVertex2d(0.8, .2);
+    glEnd();
+
+    // DEBUG: Draw red square at fixed screen position (200, 200) to confirm drawRect executes
+    glColor3f(1.0f, 0.0f, 0.0f);
+    glBegin(GL_QUADS);
+    glVertex2d(200, 200);
+    glVertex2d(250, 200);
+    glVertex2d(250, 250);
+    glVertex2d(200, 250);
+    glEnd();
+
     // Fill (semi-transparent)
     glColor4f(0.1f, 0.1f, 0.1f, 0.35f);
     glBegin(GL_QUADS);
@@ -242,42 +260,27 @@ bool IntensityProfilePlotterInteract::draw(const OFX::DrawArgs& args)
 {
     if (!_instance) return false;
     
-    // TODO: Implement drawing using DrawSuite C API
-    // DrawSuite must be fetched from host
-    
-    // Get current parameter values
-    double point1[2], point2[2];
-    _instance->getPoint1Param()->getValueAtTime(args.time, point1[0], point1[1]);
-    _instance->getPoint2Param()->getValueAtTime(args.time, point2[0], point2[1]);
-    double rectPos[2], rectSize[2];
-    _instance->getPlotRectPosParam()->getValueAtTime(args.time, rectPos[0], rectPos[1]);
-    _instance->getPlotRectSizeParam()->getValueAtTime(args.time, rectSize[0], rectSize[1]);
-
-    // Convert normalized to pixel coordinates
-    double px1, py1, px2, py2;
-    normalizedToPixel(point1[0], point1[1], px1, py1);
-    normalizedToPixel(point2[0], point2[1], px2, py2);
-    double rx, ry;
-    normalizedToPixel(rectPos[0], rectPos[1], rx, ry);
-    double rw = rectSize[0] * 1920.0;
-    double rh = rectSize[1] * 1080.0;
-
-    // Draw rectangle and handles
-    bool rectSelected = (_dragState == kDragRectMove || _dragState == kDragRectTL || _dragState == kDragRectTR || _dragState == kDragRectBL || _dragState == kDragRectBR);
-    drawRect(args, rx, ry, rw, rh, rectSelected);
-    drawHandle(args, rx, ry, _dragState == kDragRectTL);
-    drawHandle(args, rx + rw, ry, _dragState == kDragRectTR);
-    drawHandle(args, rx, ry + rh, _dragState == kDragRectBL);
-    drawHandle(args, rx + rw, ry + rh, _dragState == kDragRectBR);
-
-    // Draw scan line
-    drawLine(args, px1, py1, px2, py2);
-
-    // Draw endpoints
-    bool point1Selected = (_dragState == kDragPoint1);
-    bool point2Selected = (_dragState == kDragPoint2);
-    drawPoint(args, px1, py1, point1Selected);
-    drawPoint(args, px2, py2, point2Selected);
+    try {
+        // Get point parameters
+        double point1[2] = {0.2, 0.5}, point2[2] = {0.8, 0.5};
+        OFX::Double2DParam* p1 = _instance->fetchDouble2DParam("point1");
+        if (p1) p1->getValueAtTime(args.time, point1[0], point1[1]);
+        
+        OFX::Double2DParam* p2 = _instance->fetchDouble2DParam("point2");
+        if (p2) p2->getValueAtTime(args.time, point2[0], point2[1]);
+        
+        // Convert to pixel coordinates
+        double px1, py1, px2, py2;
+        normalizedToPixel(point1[0], point1[1], px1, py1);
+        normalizedToPixel(point2[0], point2[1], px2, py2);
+        
+        // Draw line
+        drawLine(args, px1, py1, px2, py2);
+        
+        // Draw points
+        drawPoint(args, px1, py1, _dragState == kDragPoint1);
+        drawPoint(args, px2, py2, _dragState == kDragPoint2);
+    } catch (...) {}
     
     return true;
 }
@@ -286,71 +289,31 @@ bool IntensityProfilePlotterInteract::penDown(const OFX::PenArgs& args)
 {
     if (!_instance) return false;
     
-    // Get current parameter values
-    double point1[2], point2[2];
-    _instance->getPoint1Param()->getValueAtTime(args.time, point1[0], point1[1]);
-    _instance->getPoint2Param()->getValueAtTime(args.time, point2[0], point2[1]);
-    
-    // Convert normalized to pixel coordinates
-    // Use simple scaling based on typical HD dimensions
-    double px1 = point1[0] * 1920.0;
-    double py1 = point1[1] * 1080.0;
-    double px2 = point2[0] * 1920.0;
-    double py2 = point2[1] * 1080.0;
-    
-    // Rect info
-    double rectPos[2], rectSize[2];
-    _instance->getPlotRectPosParam()->getValueAtTime(args.time, rectPos[0], rectPos[1]);
-    _instance->getPlotRectSizeParam()->getValueAtTime(args.time, rectSize[0], rectSize[1]);
-    double rx, ry;
-    normalizedToPixel(rectPos[0], rectPos[1], rx, ry);
-    double rw = rectSize[0] * 1920.0;
-    double rh = rectSize[1] * 1080.0;
-
-    // Hit test points first (higher priority)
-    double pixelScale = args.pixelScale.x;
-    if (hitTestPoint(args.penPosition.x, args.penPosition.y, px1, py1, pixelScale)) {
-        _dragState = kDragPoint1;
-        return true;
-    } else if (hitTestPoint(args.penPosition.x, args.penPosition.y, px2, py2, pixelScale)) {
-        _dragState = kDragPoint2;
-        return true;
-    }
-
-    // Then test rectangle handles
-    int rectHandle = hitTestRectHandles(args.penPosition.x, args.penPosition.y, rx, ry, rw, rh, pixelScale);
-    if (rectHandle != -1) {
-        _dragState = static_cast<DragState>(rectHandle);
-        _rectDragStartX = args.penPosition.x;
-        _rectDragStartY = args.penPosition.y;
-        _rectStartPos[0] = rectPos[0];
-        _rectStartPos[1] = rectPos[1];
-        _rectStartSize[0] = rectSize[0];
-        _rectStartSize[1] = rectSize[1];
-        return true;
-    }
-
-    // Then test rectangle body for move
-    if (hitTestRectBody(args.penPosition.x, args.penPosition.y, rx, ry, rw, rh)) {
-        _dragState = kDragRectMove;
-        _rectDragStartX = args.penPosition.x;
-        _rectDragStartY = args.penPosition.y;
-        _rectStartPos[0] = rectPos[0];
-        _rectStartPos[1] = rectPos[1];
-        _rectStartSize[0] = rectSize[0];
-        _rectStartSize[1] = rectSize[1];
-        return true;
-    }
-    
-    // Then test the line connecting the points
-    double t = 0.0;
-    if (hitTestLine(args.penPosition.x, args.penPosition.y, px1, py1, px2, py2, pixelScale, t)) {
-        _dragState = kDragLine;
-        _lineDragOffset = t; // Store position along the line
-        _lastMouseX = args.penPosition.x;
-        _lastMouseY = args.penPosition.y;
-        return true;
-    }
+    try {
+        // Get point parameters
+        double point1[2] = {0.2, 0.5}, point2[2] = {0.8, 0.5};
+        OFX::Double2DParam* p1 = _instance->fetchDouble2DParam("point1");
+        if (p1) p1->getValueAtTime(args.time, point1[0], point1[1]);
+        
+        OFX::Double2DParam* p2 = _instance->fetchDouble2DParam("point2");
+        if (p2) p2->getValueAtTime(args.time, point2[0], point2[1]);
+        
+        // Convert to pixel coordinates
+        double px1 = point1[0] * 1920.0;
+        double py1 = point1[1] * 1080.0;
+        double px2 = point2[0] * 1920.0;
+        double py2 = point2[1] * 1080.0;
+        
+        // Hit test points
+        double pixelScale = args.pixelScale.x;
+        if (hitTestPoint(args.penPosition.x, args.penPosition.y, px1, py1, pixelScale)) {
+            _dragState = kDragPoint1;
+            return true;
+        } else if (hitTestPoint(args.penPosition.x, args.penPosition.y, px2, py2, pixelScale)) {
+            _dragState = kDragPoint2;
+            return true;
+        }
+    } catch (...) {}
     
     _dragState = kDragNone;
     return false;
@@ -358,98 +321,27 @@ bool IntensityProfilePlotterInteract::penDown(const OFX::PenArgs& args)
 
 bool IntensityProfilePlotterInteract::penMotion(const OFX::PenArgs& args)
 {
-    if (!_instance) return false;
+    if (!_instance || _dragState == kDragNone) return false;
     
-    if (_dragState == kDragNone) {
-        return false;
-    }
-    
-    // Convert pixel to normalized coordinates using simple scaling
-    double nx = args.penPosition.x / 1920.0;
-    double ny = args.penPosition.y / 1080.0;
-    nx = std::max(0.0, std::min(1.0, nx));
-    ny = std::max(0.0, std::min(1.0, ny));
-
-    // Update parameter
-    if (_dragState == kDragPoint1) {
-        _instance->getPoint1Param()->setValue(nx, ny);
-    } else if (_dragState == kDragPoint2) {
-        _instance->getPoint2Param()->setValue(nx, ny);
-    } else if (_dragState == kDragLine) {
-        double point1[2], point2[2];
-        _instance->getPoint1Param()->getValueAtTime(args.time, point1[0], point1[1]);
-        _instance->getPoint2Param()->getValueAtTime(args.time, point2[0], point2[1]);
-
-        double deltaX = args.penPosition.x - _lastMouseX;
-        double deltaY = args.penPosition.y - _lastMouseY;
-        double deltaNormX = deltaX / 1920.0;
-        double deltaNormY = deltaY / 1080.0;
-
-        double newP1X = point1[0] + deltaNormX;
-        double newP1Y = point1[1] + deltaNormY;
-        double newP2X = point2[0] + deltaNormX;
-        double newP2Y = point2[1] + deltaNormY;
-
-        newP1X = std::max(0.0, std::min(1.0, newP1X));
-        newP1Y = std::max(0.0, std::min(1.0, newP1Y));
-        newP2X = std::max(0.0, std::min(1.0, newP2X));
-        newP2Y = std::max(0.0, std::min(1.0, newP2Y));
-
-        _instance->getPoint1Param()->setValue(newP1X, newP1Y);
-        _instance->getPoint2Param()->setValue(newP2X, newP2Y);
-
-        _lastMouseX = args.penPosition.x;
-        _lastMouseY = args.penPosition.y;
-    } else if (_dragState == kDragRectMove || _dragState == kDragRectTL || _dragState == kDragRectTR ||
-               _dragState == kDragRectBL || _dragState == kDragRectBR) {
-        double deltaX = (args.penPosition.x - _rectDragStartX) / 1920.0;
-        double deltaY = (args.penPosition.y - _rectDragStartY) / 1080.0;
-
-        double newPosX = _rectStartPos[0];
-        double newPosY = _rectStartPos[1];
-        double newSizeX = _rectStartSize[0];
-        double newSizeY = _rectStartSize[1];
-
-        const double minSize = 0.05;
-
-        if (_dragState == kDragRectMove) {
-            newPosX = _rectStartPos[0] + deltaX;
-            newPosY = _rectStartPos[1] + deltaY;
-        } else {
-            // Resize by adjusting the relevant edges
-            if (_dragState == kDragRectTL || _dragState == kDragRectBL) {
-                double newRight = _rectStartPos[0] + _rectStartSize[0];
-                newPosX = _rectStartPos[0] + deltaX;
-                newPosX = std::max(0.0, std::min(newPosX, newRight - minSize));
-                newSizeX = newRight - newPosX;
-            }
-            if (_dragState == kDragRectTR || _dragState == kDragRectBR) {
-                double newWidth = _rectStartSize[0] + deltaX;
-                newSizeX = std::max(minSize, newWidth);
-            }
-            if (_dragState == kDragRectTL || _dragState == kDragRectTR) {
-                double newBottom = _rectStartPos[1] + _rectStartSize[1];
-                newPosY = _rectStartPos[1] + deltaY;
-                newPosY = std::max(0.0, std::min(newPosY, newBottom - minSize));
-                newSizeY = newBottom - newPosY;
-            }
-            if (_dragState == kDragRectBL || _dragState == kDragRectBR) {
-                double newHeight = _rectStartSize[1] + deltaY;
-                newSizeY = std::max(minSize, newHeight);
-            }
+    try {
+        // Convert pixel to normalized coordinates
+        double nx = args.penPosition.x / 1920.0;
+        double ny = args.penPosition.y / 1080.0;
+        nx = std::max(0.0, std::min(1.0, nx));
+        ny = std::max(0.0, std::min(1.0, ny));
+        
+        if (_dragState == kDragPoint1) {
+            OFX::Double2DParam* p = _instance->fetchDouble2DParam("point1");
+            if (p) p->setValue(nx, ny);
+            return true;
+        } else if (_dragState == kDragPoint2) {
+            OFX::Double2DParam* p = _instance->fetchDouble2DParam("point2");
+            if (p) p->setValue(nx, ny);
+            return true;
         }
-
-        // Clamp within [0,1]
-        newPosX = std::max(0.0, std::min(1.0 - newSizeX, newPosX));
-        newPosY = std::max(0.0, std::min(1.0 - newSizeY, newPosY));
-        newSizeX = std::max(minSize, std::min(1.0 - newPosX, newSizeX));
-        newSizeY = std::max(minSize, std::min(1.0 - newPosY, newSizeY));
-
-        _instance->getPlotRectPosParam()->setValue(newPosX, newPosY);
-        _instance->getPlotRectSizeParam()->setValue(newSizeX, newSizeY);
-    }
+    } catch (...) {}
     
-    return true;
+    return false;
 }
 
 bool IntensityProfilePlotterInteract::penUp(const OFX::PenArgs& args)

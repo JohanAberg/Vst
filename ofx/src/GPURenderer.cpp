@@ -13,6 +13,8 @@
 
 #include <cmath>
 #include <algorithm>
+#include <cstring>
+#include <vector>
 
 bool GPURenderer::_metalAvailable = false;
 bool GPURenderer::_openclAvailable = false;
@@ -33,32 +35,43 @@ void GPURenderer::checkAvailability()
         return;
     }
     
+    try {
 #ifdef __APPLE__
-    // Check Metal availability
-    @autoreleasepool {
-        id<MTLDevice> device = MTLCreateSystemDefaultDevice();
-        _metalAvailable = (device != nil);
-        if (device) {
-            [device release];
+        // Check Metal availability
+        @autoreleasepool {
+            id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+            _metalAvailable = (device != nil);
+            if (device) {
+                [device release];
+            }
         }
-    }
 #endif
 
 #ifdef HAVE_OPENCL
-    // Check OpenCL availability
-    cl_uint platformCount = 0;
-    clGetPlatformIDs(0, nullptr, &platformCount);
-    _openclAvailable = (platformCount > 0);
+        // Check OpenCL availability
+        cl_uint platformCount = 0;
+        clGetPlatformIDs(0, nullptr, &platformCount);
+        _openclAvailable = (platformCount > 0);
 #else
-    _openclAvailable = false;
+        _openclAvailable = false;
 #endif
+    } catch (...) {
+        // If any exception occurs, mark as unavailable
+        _metalAvailable = false;
+        _openclAvailable = false;
+    }
 
     _availabilityChecked = true;
 }
 
 bool GPURenderer::isAvailable()
 {
-    GPURenderer renderer;
+    // Don't create an instance - just check static flags
+    // Ensure availability has been checked once
+    if (!_availabilityChecked) {
+        GPURenderer temp;
+        // This calls checkAvailability() which sets the static flags
+    }
     return _metalAvailable || _openclAvailable;
 }
 
@@ -174,12 +187,27 @@ bool GPURenderer::sampleMetal(
             return false;
         }
         
+        int rowBytes = image->getRowBytes();
         OFX::PixelComponentEnum components = image->getPixelComponents();
         int componentCount = (components == OFX::ePixelComponentRGBA) ? 4 : 3;
         
+        // Pack image data to handle stride/padding and negative rowBytes
+        std::vector<float> packedData;
+        try {
+            packedData.resize(imageWidth * imageHeight * componentCount);
+        } catch (...) {
+            return false;
+        }
+        
+        for (int y = 0; y < imageHeight; ++y) {
+            const float* srcRow = (const float*)((const char*)imageData + y * rowBytes);
+            float* dstRow = packedData.data() + y * imageWidth * componentCount;
+            std::memcpy(dstRow, srcRow, imageWidth * componentCount * sizeof(float));
+        }
+        
         // Create input buffer
-        size_t imageDataSize = imageWidth * imageHeight * componentCount * sizeof(float);
-        id<MTLBuffer> inputBuffer = [device newBufferWithBytes:imageData length:imageDataSize options:MTLResourceStorageModeShared];
+        size_t imageDataSize = packedData.size() * sizeof(float);
+        id<MTLBuffer> inputBuffer = [device newBufferWithBytes:packedData.data() length:imageDataSize options:MTLResourceStorageModeShared];
         
         // Create output buffer
         size_t outputSize = sampleCount * 3 * sizeof(float);
