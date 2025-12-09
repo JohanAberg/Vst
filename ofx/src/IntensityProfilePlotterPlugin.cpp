@@ -32,7 +32,7 @@ void IntensityProfilePlotterPluginFactory::describe(OFX::ImageEffectDescriptor& 
     );
     
     // Plugin version (major, minor, micro, build, label)
-    desc.setVersion(2, 0, 0, 6, "");
+    desc.setVersion(2, 0, 0, 13, "");
     
     // Supported contexts
     desc.addSupportedContext(OFX::eContextFilter);
@@ -175,7 +175,7 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     // Version info (read-only string)
     OFX::StringParamDescriptor* versionParam = desc.defineStringParam("_version");
     versionParam->setLabel("Version");
-    versionParam->setDefault("1.0.0.2");
+    versionParam->setDefault("2.0.0.13");
     versionParam->setEvaluateOnChange(false);
     versionParam->setAnimates(false);
     
@@ -295,19 +295,11 @@ void IntensityProfilePlotterPlugin::getClipPreferences(OFX::ClipPreferencesSette
 bool IntensityProfilePlotterPlugin::isIdentity(const OFX::IsIdentityArguments& args, 
                                                OFX::Clip*& identityClip, double& identityTime)
 {
-    // Act as identity (pass-through) to avoid render crashes
-    try {
-        OFX::Clip* srcClip = fetchClip(kOfxImageEffectSimpleSourceClipName);
-        if (srcClip) {
-            identityClip = srcClip;
-            identityTime = args.time;
-            return true;
-        }
-    } catch (...) {}
+    // Always return false - we don't use identity
     return false;
 }
 
 void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
 {
-    // Empty render - do nothing
+    // Empty - do nothing
 }
