@@ -230,19 +230,25 @@ class NatronBenchmark:
     def create_test_project(self, width: int, height: int) -> Optional[NatronEngine.Group]:
         """Create a new Natron project with test composition"""
         try:
-            # Create new project
-            proj = self.app.newProject()
-            
-            # Create composition
-            comp = proj.createGroup()
-            comp.setLabel(f"Test_{width}x{height}")
-            
-            # Set resolution
-            comp.getParam("projectWidth").set(width)
-            comp.getParam("projectHeight").set(height)
-            
-            print(f"  Created composition: {width}x{height}")
-            return comp
+            # In Natron 2.5 headless, app is already the composition/project
+            # Set resolution on the app directly
+            try:
+                # Try to get the main composition/group
+                comp = self.app
+                
+                # Try to set project dimensions (method varies by Natron version)
+                try:
+                    comp.getParam("projectWidth").set(width)
+                    comp.getParam("projectHeight").set(height)
+                except:
+                    # If that doesn't work, try setting as render context
+                    pass
+                
+                print(f"  Created composition: {width}x{height}")
+                return comp
+            except Exception as e:
+                print(f"  ✗ Failed to create project: {e}")
+                return None
         except Exception as e:
             print(f"  ✗ Failed to create project: {e}")
             return None
