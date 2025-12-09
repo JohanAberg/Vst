@@ -47,6 +47,7 @@ public:
     OFX::RGBAParam* getGreenCurveColorParam() const { return _greenCurveColorParam; }
     OFX::RGBAParam* getBlueCurveColorParam() const { return _blueCurveColorParam; }
     OFX::BooleanParam* getShowReferenceRampParam() const { return _showReferenceRampParam; }
+    OFX::BooleanParam* getEnablePlotParam() const { return _enablePlotParam; }
 
     // Clip accessors for overlay sampling
     OFX::Clip* getSourceClip() { if(!_srcClip) setupClips(); return _srcClip; }
@@ -91,6 +92,7 @@ private:
     OFX::RGBAParam* _greenCurveColorParam = nullptr;
     OFX::RGBAParam* _blueCurveColorParam = nullptr;
     OFX::BooleanParam* _showReferenceRampParam = nullptr;
+    OFX::BooleanParam* _enablePlotParam = nullptr;
     OFX::StringParam* _versionParam = nullptr;
     
     // Components

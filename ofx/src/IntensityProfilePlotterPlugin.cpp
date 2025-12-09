@@ -32,7 +32,7 @@ void IntensityProfilePlotterPluginFactory::describe(OFX::ImageEffectDescriptor& 
     );
     
     // Plugin version (major, minor, micro, build, label)
-    desc.setVersion(2, 0, 0, 13, "");
+    desc.setVersion(2, 0, 0, 21, "");
     
     // Supported contexts
     desc.addSupportedContext(OFX::eContextFilter);
@@ -42,6 +42,7 @@ void IntensityProfilePlotterPluginFactory::describe(OFX::ImageEffectDescriptor& 
     
     // Set render thread safety
     desc.setRenderThreadSafety(OFX::eRenderInstanceSafe);
+    desc.setHostFrameThreading(true);  // Enable host-managed multithreading
     
 #ifdef __APPLE__
     desc.setSupportsMetalRender(true);
@@ -164,10 +165,17 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     showRampParam->setHint("Display linear 0-1 grayscale ramp background");
     showRampParam->setAnimates(false);
     
+    // Enable plot overlay
+    OFX::BooleanParamDescriptor* enablePlotParam = desc.defineBooleanParam("enablePlot");
+    enablePlotParam->setLabel("Enable Plot");
+    enablePlotParam->setDefault(true);
+    enablePlotParam->setHint("Enable/disable the intensity plot visualization");
+    enablePlotParam->setAnimates(false);
+    
     // Version info (read-only string)
     OFX::StringParamDescriptor* versionParam = desc.defineStringParam("_version");
     versionParam->setLabel("Version");
-    versionParam->setDefault("2.0.0.18 (" __DATE__ " " __TIME__ ")");
+    versionParam->setDefault("2.0.0.21 (" __DATE__ " " __TIME__ ")");
     versionParam->setEvaluateOnChange(false);
     versionParam->setAnimates(false);
     
@@ -258,10 +266,12 @@ void IntensityProfilePlotterPlugin::setupParameters()
         _greenCurveColorParam = fetchRGBAParam("greenCurveColor");
         _blueCurveColorParam = fetchRGBAParam("blueCurveColor");
         _showReferenceRampParam = fetchBooleanParam("showReferenceRamp");
+        _enablePlotParam = fetchBooleanParam("enablePlot");
+        _enablePlotParam = fetchBooleanParam("enablePlot");
 
         _versionParam = fetchStringParam("_version");
         if (_versionParam) {
-            const std::string buildVersion = std::string("2.0.0.18 ") + __DATE__ + " " + __TIME__;
+            const std::string buildVersion = std::string("2.0.0.21 ") + __DATE__ + " " + __TIME__;
             _versionParam->setValue(buildVersion);
         }
     } catch (...) {}
@@ -293,47 +303,79 @@ void IntensityProfilePlotterPlugin::getClipPreferences(OFX::ClipPreferencesSette
 bool IntensityProfilePlotterPlugin::isIdentity(const OFX::IsIdentityArguments& args, 
                                                OFX::Clip*& identityClip, double& identityTime)
 {
-    // Always return false - we don't use identity
+    // Optimization: Skip rendering if plot is disabled
+    // This avoids the expensive pixel copy when the overlay isn't even visible
+    try {
+        if (!_enablePlotParam) {
+            _enablePlotParam = fetchBooleanParam("enablePlot");
+        }
+        if (_enablePlotParam && !_enablePlotParam->getValueAtTime(args.time)) {
+            // Plot disabled - return identity to skip render entirely
+            if (!_srcClip) {
+                _srcClip = fetchClip(kOfxImageEffectSimpleSourceClipName);
+            }
+            identityClip = _srcClip;
+            identityTime = args.time;
+            return true;  // Skip render when plot is off
+        }
+    } catch (...) {
+        // If parameter fetch fails, proceed with normal render
+    }
+    
+    // Plot is enabled - must render to copy pixels and draw overlay
     return false;
 }
 
-void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
+void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)    
 {
-    // Copy source to destination so the host sees the unmodified clip
-    // We keep the overlay rendering in the interact only.
-    if (!_srcClip || !_dstClip) {
-        setupClips();
-    }
-
-    if (!_srcClip || !_dstClip) {
-        return;
-    }
-
-    std::unique_ptr<OFX::Image> src(_srcClip->fetchImage(args.time));
-    std::unique_ptr<OFX::Image> dst(_dstClip->fetchImage(args.time));
-    if (!src || !dst) {
-        return;
-    }
-
-    const OfxRectI& rw = args.renderWindow;
-    int comps = 0;
-    switch (dst->getPixelComponents()) {
-    case OFX::ePixelComponentRGBA: comps = 4; break;
-    case OFX::ePixelComponentRGB:  comps = 3; break;
-    case OFX::ePixelComponentAlpha: comps = 1; break;
-    default: return; // unsupported
-    }
-
-    // We declared float-only in describeInContext, so assume float pixels
-    const size_t bytesPerPixel = comps * sizeof(float);
-    const int width = rw.x2 - rw.x1;
-
-    for (int y = rw.y1; y < rw.y2; ++y) {
-        const float* s = reinterpret_cast<const float*>(src->getPixelAddress(rw.x1, y));
-        float* d = reinterpret_cast<float*>(dst->getPixelAddress(rw.x1, y));
-        if (!s || !d) {
-            continue;
+    try {
+        // Fetch clips
+        OFX::Clip* srcClip = fetchClip(kOfxImageEffectSimpleSourceClipName);
+        OFX::Clip* dstClip = fetchClip(kOfxImageEffectOutputClipName);
+        
+        if (!srcClip || !dstClip) {
+            return;
         }
-        std::memcpy(d, s, static_cast<size_t>(width) * bytesPerPixel);
+        
+        // Fetch images
+        auto srcImg = srcClip->fetchImage(args.time);
+        auto dstImg = dstClip->fetchImage(args.time);
+        
+        if (!srcImg || !dstImg) {
+            return;
+        }
+        
+        // Get image properties
+        OfxRectI srcBounds = srcImg->getBounds();
+        int srcRowBytes = srcImg->getRowBytes();
+        int dstRowBytes = dstImg->getRowBytes();
+        
+        // Get the renderWindow - only copy this region (host manages parallel regions)
+        OfxRectI renderWindow = args.renderWindow;
+        
+        // Copy source to destination pixel by pixel, but only in the renderWindow
+        void* srcPtr = srcImg->getPixelData();
+        void* dstPtr = dstImg->getPixelData();
+        
+        if (srcPtr && dstPtr) {
+            // Determine number of bytes per pixel (assuming float RGBA = 16 bytes)
+            int bytesPerPixel = 16;
+            int width = renderWindow.x2 - renderWindow.x1;
+            int height = renderWindow.y2 - renderWindow.y1;
+            
+            // Copy only the renderWindow region
+            // Calculate the offset into the full image buffers
+            int xOffset = renderWindow.x1 - srcBounds.x1;
+            int yOffset = renderWindow.y1 - srcBounds.y1;
+            
+            for (int y = 0; y < height; ++y) {
+                int fullY = yOffset + y;
+                char* srcRow = (char*)srcPtr + fullY * srcRowBytes + xOffset * bytesPerPixel;
+                char* dstRow = (char*)dstPtr + fullY * dstRowBytes + xOffset * bytesPerPixel;
+                std::memcpy(dstRow, srcRow, width * bytesPerPixel);
+            }
+        }
+    } catch (...) {
+        // Silently catch exceptions - don't want to crash host
     }
 }
