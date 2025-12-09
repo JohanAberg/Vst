@@ -109,14 +109,6 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     sampleCountParam->setDisplayRange(64, 2048);
     sampleCountParam->setHint("Number of samples along the scan line");
     sampleCountParam->setAnimates(false);
-    
-    // Plot height
-    OFX::DoubleParamDescriptor* plotHeightParam = desc.defineDoubleParam("plotHeight");
-    plotHeightParam->setLabel("Plot Height");
-    plotHeightParam->setDefault(0.3);
-    plotHeightParam->setDisplayRange(0.1, 0.8);
-    plotHeightParam->setHint("Height of the plot overlay (normalized)");
-    plotHeightParam->setAnimates(false);
 
     // Plot rectangle position (top-left) and size (normalized)
     OFX::Double2DParamDescriptor* plotRectPosParam = desc.defineDouble2DParam("plotRectPos");
@@ -175,7 +167,7 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     // Version info (read-only string)
     OFX::StringParamDescriptor* versionParam = desc.defineStringParam("_version");
     versionParam->setLabel("Version");
-    versionParam->setDefault("2.0.0.13");
+    versionParam->setDefault("2.0.0.15 (" __DATE__ " " __TIME__ ")");
     versionParam->setEvaluateOnChange(false);
     versionParam->setAnimates(false);
     
@@ -207,6 +199,7 @@ void getPluginIDs(OFX::PluginFactoryArray &ids)
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <string>
 
 // Define the plugin class
 IntensityProfilePlotterPlugin::IntensityProfilePlotterPlugin(OfxImageEffectHandle handle)
@@ -257,7 +250,6 @@ void IntensityProfilePlotterPlugin::setupParameters()
         _point2Param = fetchDouble2DParam("point2");
         _dataSourceParam = fetchChoiceParam("dataSource");
         _sampleCountParam = fetchIntParam("sampleCount");
-        _plotHeightParam = fetchDoubleParam("plotHeight");
         _plotRectPosParam = fetchDouble2DParam("plotRectPos");
         _plotRectSizeParam = fetchDouble2DParam("plotRectSize");
         _whitePointParam = fetchDoubleParam("whitePoint");
@@ -266,6 +258,12 @@ void IntensityProfilePlotterPlugin::setupParameters()
         _greenCurveColorParam = fetchRGBAParam("greenCurveColor");
         _blueCurveColorParam = fetchRGBAParam("blueCurveColor");
         _showReferenceRampParam = fetchBooleanParam("showReferenceRamp");
+
+        _versionParam = fetchStringParam("_version");
+        if (_versionParam) {
+            const std::string buildVersion = std::string("2.0.0.15 ") + __DATE__ + " " + __TIME__;
+            _versionParam->setValue(buildVersion);
+        }
     } catch (...) {}
 }
 
@@ -301,5 +299,41 @@ bool IntensityProfilePlotterPlugin::isIdentity(const OFX::IsIdentityArguments& a
 
 void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
 {
-    // Empty - do nothing
+    // Copy source to destination so the host sees the unmodified clip
+    // We keep the overlay rendering in the interact only.
+    if (!_srcClip || !_dstClip) {
+        setupClips();
+    }
+
+    if (!_srcClip || !_dstClip) {
+        return;
+    }
+
+    std::unique_ptr<OFX::Image> src(_srcClip->fetchImage(args.time));
+    std::unique_ptr<OFX::Image> dst(_dstClip->fetchImage(args.time));
+    if (!src || !dst) {
+        return;
+    }
+
+    const OfxRectI& rw = args.renderWindow;
+    int comps = 0;
+    switch (dst->getPixelComponents()) {
+    case OFX::ePixelComponentRGBA: comps = 4; break;
+    case OFX::ePixelComponentRGB:  comps = 3; break;
+    case OFX::ePixelComponentAlpha: comps = 1; break;
+    default: return; // unsupported
+    }
+
+    // We declared float-only in describeInContext, so assume float pixels
+    const size_t bytesPerPixel = comps * sizeof(float);
+    const int width = rw.x2 - rw.x1;
+
+    for (int y = rw.y1; y < rw.y2; ++y) {
+        const float* s = reinterpret_cast<const float*>(src->getPixelAddress(rw.x1, y));
+        float* d = reinterpret_cast<float*>(dst->getPixelAddress(rw.x1, y));
+        if (!s || !d) {
+            continue;
+        }
+        std::memcpy(d, s, static_cast<size_t>(width) * bytesPerPixel);
+    }
 }

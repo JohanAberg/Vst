@@ -39,7 +39,6 @@ public:
     OFX::Double2DParam* getPoint2Param() const { return _point2Param; }
     OFX::ChoiceParam* getDataSourceParam() const { return _dataSourceParam; }
     OFX::IntParam* getSampleCountParam() const { return _sampleCountParam; }
-    OFX::DoubleParam* getPlotHeightParam() const { return _plotHeightParam; }
     OFX::Double2DParam* getPlotRectPosParam() const { return _plotRectPosParam; }
     OFX::Double2DParam* getPlotRectSizeParam() const { return _plotRectSizeParam; }
     OFX::DoubleParam* getWhitePointParam() const { return _whitePointParam; }
@@ -48,6 +47,10 @@ public:
     OFX::RGBAParam* getGreenCurveColorParam() const { return _greenCurveColorParam; }
     OFX::RGBAParam* getBlueCurveColorParam() const { return _blueCurveColorParam; }
     OFX::BooleanParam* getShowReferenceRampParam() const { return _showReferenceRampParam; }
+
+    // Clip accessors for overlay sampling
+    OFX::Clip* getSourceClip() { if(!_srcClip) setupClips(); return _srcClip; }
+    OFX::Clip* getOutputClip() { if(!_dstClip) setupClips(); return _dstClip; }
     
     // Store sampled curve data for interact to render
     void setCurveSamples(const std::vector<float>& red, const std::vector<float>& green, const std::vector<float>& blue)
@@ -80,7 +83,6 @@ private:
     OFX::Double2DParam* _point2Param = nullptr;      // Normalized coordinates [0-1, 0-1]
     OFX::ChoiceParam* _dataSourceParam = nullptr;    // 0=Input Clip, 1=Auxiliary Clip, 2=Built-in Ramp
     OFX::IntParam* _sampleCountParam = nullptr;       // Number of samples along scan line
-    OFX::DoubleParam* _plotHeightParam = nullptr;    // Height of plot overlay (normalized)
     OFX::Double2DParam* _plotRectPosParam = nullptr;  // Top-left normalized position of plot rect
     OFX::Double2DParam* _plotRectSizeParam = nullptr; // Normalized size of plot rect
     OFX::DoubleParam* _whitePointParam = nullptr;     // Map this intensity to 1.0
@@ -89,6 +91,7 @@ private:
     OFX::RGBAParam* _greenCurveColorParam = nullptr;
     OFX::RGBAParam* _blueCurveColorParam = nullptr;
     OFX::BooleanParam* _showReferenceRampParam = nullptr;
+    OFX::StringParam* _versionParam = nullptr;
     
     // Components
     std::unique_ptr<IntensitySampler> _sampler;
