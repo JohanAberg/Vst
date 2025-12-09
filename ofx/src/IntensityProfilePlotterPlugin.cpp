@@ -171,6 +171,15 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     enablePlotParam->setHint("Enable/disable the intensity plot visualization");
     enablePlotParam->setAnimates(false);
     
+    // Rectangle shade value
+    OFX::DoubleParamDescriptor* rectShadeParam = desc.defineDoubleParam("rectShade");
+    rectShadeParam->setLabel("Rectangle Shade");
+    rectShadeParam->setDefault(0.0);
+    rectShadeParam->setRange(0.0, 1.0);
+    rectShadeParam->setDisplayRange(0.0, 1.0);
+    rectShadeParam->setHint("Multiply pixels under the plot rectangle (0=black, 1=unchanged)." );
+    rectShadeParam->setAnimates(true);
+    
     // Version info (read-only string)
     OFX::StringParamDescriptor* versionParam = desc.defineStringParam("_version");
     versionParam->setLabel("Version");
@@ -266,6 +275,7 @@ void IntensityProfilePlotterPlugin::setupParameters()
         _blueCurveColorParam = fetchRGBAParam("blueCurveColor");
         _showReferenceRampParam = fetchBooleanParam("showReferenceRamp");
         _enablePlotParam = fetchBooleanParam("enablePlot");
+        _rectShadeParam = fetchDoubleParam("rectShade");
 
         _versionParam = fetchStringParam("_version");
         if (_versionParam) {
@@ -465,23 +475,89 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
             }
             
             int componentCount = (components == OFX::ePixelComponentRGBA) ? 4 : 3;
+            int colorChannels = (components == OFX::ePixelComponentRGBA) ? 3 : componentCount;
             int bytesPerPixel = bytesPerComponent * componentCount;
             
             int width = renderWindow.x2 - renderWindow.x1;
             int height = renderWindow.y2 - renderWindow.y1;
             int rowBytes = width * bytesPerPixel;
             
+            // Get rectangle shade parameter
+            double rectShade = 0.0;
+            if (!_rectShadeParam) setupParameters();
+            if (_rectShadeParam) {
+                rectShade = _rectShadeParam->getValueAtTime(args.time);
+            }
+            
+            // Get plot rectangle bounds in pixel coordinates
+            OfxRectI plotRect = {0, 0, 0, 0};
+            bool hasShade = (rectShade > 0.0);
+            if (hasShade) {
+                if (!_plotRectPosParam) setupParameters();
+                if (!_plotRectSizeParam) setupParameters();
+                
+                if (_plotRectPosParam && _plotRectSizeParam) {
+                    double posX, posY, sizeX, sizeY;
+                    _plotRectPosParam->getValueAtTime(args.time, posX, posY);
+                    _plotRectSizeParam->getValueAtTime(args.time, sizeX, sizeY);
+                    
+                    int imgWidth = srcBounds.x2 - srcBounds.x1;
+                    int imgHeight = srcBounds.y2 - srcBounds.y1;
+                    
+                    plotRect.x1 = srcBounds.x1 + static_cast<int>(posX * imgWidth);
+                    plotRect.y1 = srcBounds.y1 + static_cast<int>(posY * imgHeight);
+                    plotRect.x2 = plotRect.x1 + static_cast<int>(sizeX * imgWidth);
+                    plotRect.y2 = plotRect.y1 + static_cast<int>(sizeY * imgHeight);
+                }
+            }
+            
             // Copy only the renderWindow region
             // Calculate the offset into the full image buffers
             int xOffset = renderWindow.x1 - srcBounds.x1;
             int yOffset = renderWindow.y1 - srcBounds.y1;
             
-            // Optimized: copy row by row using memcpy
-            for (int y = 0; y < height; ++y) {
-                int fullY = yOffset + y;
-                char* srcRow = (char*)srcPtr + fullY * srcRowBytes + xOffset * bytesPerPixel;
-                char* dstRow = (char*)dstPtr + fullY * dstRowBytes + xOffset * bytesPerPixel;
-                std::memcpy(dstRow, srcRow, rowBytes);
+            // Process pixels with optional shade multiply
+            double shadeFactor = std::clamp(rectShade, 0.0, 1.0);
+            bool applyShade = hasShade && shadeFactor > 0.0 && shadeFactor < 0.999999; // skip work when factor ~1
+
+            if (applyShade && bitDepth == OFX::eBitDepthFloat) {
+                // Float processing with shade multiply
+                for (int y = 0; y < height; ++y) {
+                    int fullY = yOffset + y;
+                    int absY = renderWindow.y1 + y;
+                    float* srcRow = (float*)((char*)srcPtr + fullY * srcRowBytes) + xOffset * componentCount;
+                    float* dstRow = (float*)((char*)dstPtr + fullY * dstRowBytes) + xOffset * componentCount;
+                    
+                    for (int x = 0; x < width; ++x) {
+                        int absX = renderWindow.x1 + x;
+                        bool inRect = (absX >= plotRect.x1 && absX < plotRect.x2 && 
+                                      absY >= plotRect.y1 && absY < plotRect.y2);
+                        
+                        if (inRect) {
+                            // Apply shade to color only; preserve alpha untouched
+                            for (int c = 0; c < colorChannels; ++c) {
+                                float val = srcRow[x * componentCount + c];
+                                dstRow[x * componentCount + c] = std::max(0.0f, val * static_cast<float>(shadeFactor));
+                            }
+                            if (componentCount == 4) {
+                                dstRow[x * componentCount + 3] = srcRow[x * componentCount + 3];
+                            }
+                        } else {
+                            // Copy pixel as-is
+                            for (int c = 0; c < componentCount; ++c) {
+                                dstRow[x * componentCount + c] = srcRow[x * componentCount + c];
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Fast path: simple memcpy when no shade is applied
+                for (int y = 0; y < height; ++y) {
+                    int fullY = yOffset + y;
+                    char* srcRow = (char*)srcPtr + fullY * srcRowBytes + xOffset * bytesPerPixel;
+                    char* dstRow = (char*)dstPtr + fullY * dstRowBytes + xOffset * bytesPerPixel;
+                    std::memcpy(dstRow, srcRow, rowBytes);
+                }
             }
         }
         // Images automatically released when unique_ptr goes out of scope

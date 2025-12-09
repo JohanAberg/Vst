@@ -471,6 +471,24 @@ bool IntensityProfilePlotterInteract::draw(const OFX::DrawArgs& args)
     if (!_instance) return false;
     
     try {
+        auto getFrameSize = [&](int& w, int& h) {
+            w = h = 0;
+            if (auto srcClip = _instance->getSourceClip()) {
+                // Prefer full frame ROD to avoid being constrained by tile-sized fetches
+                OfxRectD rod = srcClip->getRegionOfDefinition(args.time);
+                w = static_cast<int>(std::round(rod.x2 - rod.x1));
+                h = static_cast<int>(std::round(rod.y2 - rod.y1));
+                if (w <= 0 || h <= 0) {
+                    std::unique_ptr<OFX::Image> src(srcClip->fetchImage(args.time));
+                    if (src) {
+                        OfxRectI b = src->getBounds();
+                        w = b.x2 - b.x1;
+                        h = b.y2 - b.y1;
+                    }
+                }
+            }
+        };
+
         // Get point parameters
         double point1[2] = {0.2, 0.5}, point2[2] = {0.8, 0.5};
         OFX::Double2DParam* p1 = _instance->fetchDouble2DParam("point1");
@@ -481,14 +499,10 @@ bool IntensityProfilePlotterInteract::draw(const OFX::DrawArgs& args)
 
         int imgW = 0;
         int imgH = 0;
+        getFrameSize(imgW, imgH);
         std::unique_ptr<OFX::Image> src;
         if (auto srcClip = _instance->getSourceClip()) {
             src.reset(srcClip->fetchImage(args.time));
-            if (src) {
-                OfxRectI b = src->getBounds();
-                imgW = b.x2 - b.x1;
-                imgH = b.y2 - b.y1;
-            }
         }
 
         const double width = imgW > 0 ? static_cast<double>(imgW) : 1920.0;
@@ -540,6 +554,23 @@ bool IntensityProfilePlotterInteract::penDown(const OFX::PenArgs& args)
     if (!_instance) return false;
     
     try {
+        auto getFrameSize = [&](int& w, int& h) {
+            w = h = 0;
+            if (auto srcClip = _instance->getSourceClip()) {
+                OfxRectD rod = srcClip->getRegionOfDefinition(args.time);
+                w = static_cast<int>(std::round(rod.x2 - rod.x1));
+                h = static_cast<int>(std::round(rod.y2 - rod.y1));
+                if (w <= 0 || h <= 0) {
+                    std::unique_ptr<OFX::Image> src(srcClip->fetchImage(args.time));
+                    if (src) {
+                        OfxRectI b = src->getBounds();
+                        w = b.x2 - b.x1;
+                        h = b.y2 - b.y1;
+                    }
+                }
+            }
+        };
+
         // Get point parameters
         double point1[2] = {0.2, 0.5}, point2[2] = {0.8, 0.5};
         OFX::Double2DParam* p1 = _instance->fetchDouble2DParam("point1");
@@ -550,14 +581,7 @@ bool IntensityProfilePlotterInteract::penDown(const OFX::PenArgs& args)
         
         int imgW = 0;
         int imgH = 0;
-        if (auto srcClip = _instance->getSourceClip()) {
-            std::unique_ptr<OFX::Image> src(srcClip->fetchImage(args.time));
-            if (src) {
-                OfxRectI b = src->getBounds();
-                imgW = b.x2 - b.x1;
-                imgH = b.y2 - b.y1;
-            }
-        }
+        getFrameSize(imgW, imgH);
 
         const double width = imgW > 0 ? static_cast<double>(imgW) : 1920.0;
         const double height = imgH > 0 ? static_cast<double>(imgH) : 1080.0;
@@ -637,16 +661,26 @@ bool IntensityProfilePlotterInteract::penMotion(const OFX::PenArgs& args)
     if (!_instance || _dragState == kDragNone) return false;
     
     try {
+        auto getFrameSize = [&](int& w, int& h) {
+            w = h = 0;
+            if (auto srcClip = _instance->getSourceClip()) {
+                OfxRectD rod = srcClip->getRegionOfDefinition(args.time);
+                w = static_cast<int>(std::round(rod.x2 - rod.x1));
+                h = static_cast<int>(std::round(rod.y2 - rod.y1));
+                if (w <= 0 || h <= 0) {
+                    std::unique_ptr<OFX::Image> src(srcClip->fetchImage(args.time));
+                    if (src) {
+                        OfxRectI b = src->getBounds();
+                        w = b.x2 - b.x1;
+                        h = b.y2 - b.y1;
+                    }
+                }
+            }
+        };
+
         int imgW = 0;
         int imgH = 0;
-        if (auto srcClip = _instance->getSourceClip()) {
-            std::unique_ptr<OFX::Image> src(srcClip->fetchImage(args.time));
-            if (src) {
-                OfxRectI b = src->getBounds();
-                imgW = b.x2 - b.x1;
-                imgH = b.y2 - b.y1;
-            }
-        }
+        getFrameSize(imgW, imgH);
 
         const double width = imgW > 0 ? static_cast<double>(imgW) : 1920.0;
         const double height = imgH > 0 ? static_cast<double>(imgH) : 1080.0;

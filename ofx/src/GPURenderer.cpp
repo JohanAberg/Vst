@@ -15,6 +15,9 @@
 #include <algorithm>
 #include <cstring>
 #include <vector>
+#include <string>
+#include <sstream>
+#include <fstream>
 
 bool GPURenderer::_metalAvailable = false;
 bool GPURenderer::_openclAvailable = false;
@@ -302,9 +305,13 @@ bool GPURenderer::sampleOpenCL(
     std::vector<float>& blueSamples)
 {
     // OpenCL implementation
-    // This is a simplified version - full implementation would load kernel from file
     cl_int err;
-    
+
+    // Only float images supported for now
+    if (image->getPixelDepth() != OFX::eBitDepthFloat) {
+        return false;
+    }
+
     // Get platform
     cl_platform_id platform;
     cl_uint platformCount;
@@ -312,38 +319,294 @@ bool GPURenderer::sampleOpenCL(
     if (err != CL_SUCCESS || platformCount == 0) {
         return false;
     }
-    
-    // Get device
+
+    // Get device (GPU first, CPU fallback)
     cl_device_id device;
     cl_uint deviceCount;
     err = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &device, &deviceCount);
     if (err != CL_SUCCESS || deviceCount == 0) {
-        // Try CPU as fallback
         err = clGetDeviceIDs(platform, CL_DEVICE_TYPE_CPU, 1, &device, &deviceCount);
         if (err != CL_SUCCESS || deviceCount == 0) {
             return false;
         }
     }
-    
-    // Create context
+
+    // Create context and command queue
     cl_context context = clCreateContext(nullptr, 1, &device, nullptr, nullptr, &err);
     if (err != CL_SUCCESS) {
         return false;
     }
-    
-    // Create command queue
+
+#ifdef CL_VERSION_2_0
+    cl_command_queue queue = clCreateCommandQueueWithProperties(context, device, 0, &err);
+#else
     cl_command_queue queue = clCreateCommandQueue(context, device, 0, &err);
+#endif
     if (err != CL_SUCCESS) {
         clReleaseContext(context);
         return false;
     }
-    
-    // Load kernel source (would be loaded from file in production)
-    // For now, return false to indicate OpenCL needs kernel file
+
+    // Kernel source (embedded)
+    const char* kernelSrc = R"CLC(
+    typedef struct {
+        float point1X, point1Y;
+        float point2X, point2Y;
+        int imageWidth, imageHeight;
+        int sampleCount;
+        int componentCount;
+    } Parameters;
+
+    float3 bilinearSample(__global const float* imageData,
+                          int imageWidth,
+                          int imageHeight,
+                          int componentCount,
+                          float x,
+                          float y) {
+        x = clamp(x, 0.0f, (float)(imageWidth - 1));
+        y = clamp(y, 0.0f, (float)(imageHeight - 1));
+
+        int x0 = (int)floor(x);
+        int y0 = (int)floor(y);
+        int x1 = min(x0 + 1, imageWidth - 1);
+        int y1 = min(y0 + 1, imageHeight - 1);
+
+        float fx = x - (float)x0;
+        float fy = y - (float)y0;
+
+        int index00 = (y0 * imageWidth + x0) * componentCount;
+        int index10 = (y0 * imageWidth + x1) * componentCount;
+        int index01 = (y1 * imageWidth + x0) * componentCount;
+        int index11 = (y1 * imageWidth + x1) * componentCount;
+
+        float3 c00 = (float3)(imageData[index00 + 0], imageData[index00 + 1], imageData[index00 + 2]);
+        float3 c10 = (float3)(imageData[index10 + 0], imageData[index10 + 1], imageData[index10 + 2]);
+        float3 c01 = (float3)(imageData[index01 + 0], imageData[index01 + 1], imageData[index01 + 2]);
+        float3 c11 = (float3)(imageData[index11 + 0], imageData[index11 + 1], imageData[index11 + 2]);
+
+        float3 c0 = mix(c00, c10, fx);
+        float3 c1 = mix(c01, c11, fx);
+        return mix(c0, c1, fy);
+    }
+
+    __kernel void sampleIntensity(
+        __global const float* inputImage,
+        __global float* outputSamples,
+        __global const Parameters* params) {
+        int id = get_global_id(0);
+        if (id >= params->sampleCount) return;
+
+        float t = (float)id / (float)(max(1, params->sampleCount - 1));
+
+        float2 p1 = (float2)(params->point1X * (float)(params->imageWidth),
+                             params->point1Y * (float)(params->imageHeight));
+        float2 p2 = (float2)(params->point2X * (float)(params->imageWidth),
+                             params->point2Y * (float)(params->imageHeight));
+
+        float2 pos = mix(p1, p2, t);
+
+        float3 rgb = bilinearSample(inputImage,
+                                    params->imageWidth,
+                                    params->imageHeight,
+                                    params->componentCount,
+                                    pos.x,
+                                    pos.y);
+
+        int outIdx = id * 3;
+        outputSamples[outIdx + 0] = rgb.x;
+        outputSamples[outIdx + 1] = rgb.y;
+        outputSamples[outIdx + 2] = rgb.z;
+    }
+    )CLC";
+
+    // Build program
+    const size_t lengths = std::strlen(kernelSrc);
+    const char* sources[1] = { kernelSrc };
+    const size_t sourceLengths[1] = { lengths };
+    cl_program program = clCreateProgramWithSource(context, 1, sources, sourceLengths, &err);
+    if (err != CL_SUCCESS) {
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
+
+    err = clBuildProgram(program, 1, &device, nullptr, nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+        // Optional: fetch build log
+        size_t logSize = 0;
+        clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 0, nullptr, &logSize);
+        std::vector<char> log(logSize + 1, 0);
+        clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, logSize, log.data(), nullptr);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
+
+    cl_kernel kernel = clCreateKernel(program, "sampleIntensity", &err);
+    if (err != CL_SUCCESS) {
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
+
+    // Pack image data (remove stride)
+    float* imageData = (float*)image->getPixelData();
+    if (!imageData) {
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
+
+    OFX::PixelComponentEnum components = image->getPixelComponents();
+    int componentCount = (components == OFX::ePixelComponentRGBA) ? 4 : 3;
+    int rowBytes = image->getRowBytes();
+    size_t packedSize = imageWidth * imageHeight * componentCount;
+
+    std::vector<float> packed;
+    try {
+        packed.resize(packedSize);
+    } catch (...) {
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
+
+    for (int y = 0; y < imageHeight; ++y) {
+        const float* srcRow = (const float*)((const char*)imageData + y * rowBytes);
+        float* dstRow = packed.data() + y * imageWidth * componentCount;
+        std::memcpy(dstRow, srcRow, imageWidth * componentCount * sizeof(float));
+    }
+
+    // Buffers
+    cl_mem inputBuffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                        packedSize * sizeof(float), packed.data(), &err);
+    if (err != CL_SUCCESS) {
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
+
+    size_t outputSize = sampleCount * 3;
+    cl_mem outputBuffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, outputSize * sizeof(float), nullptr, &err);
+    if (err != CL_SUCCESS) {
+        clReleaseMemObject(inputBuffer);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
+
+    struct Parameters {
+        float point1X, point1Y;
+        float point2X, point2Y;
+        int imageWidth, imageHeight;
+        int sampleCount;
+        int componentCount;
+    } params;
+
+    params.point1X = static_cast<float>(point1[0]);
+    params.point1Y = static_cast<float>(point1[1]);
+    params.point2X = static_cast<float>(point2[0]);
+    params.point2Y = static_cast<float>(point2[1]);
+    params.imageWidth = imageWidth;
+    params.imageHeight = imageHeight;
+    params.sampleCount = sampleCount;
+    params.componentCount = componentCount;
+
+    cl_mem paramBuffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                        sizeof(params), &params, &err);
+    if (err != CL_SUCCESS) {
+        clReleaseMemObject(outputBuffer);
+        clReleaseMemObject(inputBuffer);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
+
+    // Set kernel args
+    err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &inputBuffer);
+    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &outputBuffer);
+    err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &paramBuffer);
+    if (err != CL_SUCCESS) {
+        clReleaseMemObject(paramBuffer);
+        clReleaseMemObject(outputBuffer);
+        clReleaseMemObject(inputBuffer);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
+
+    // Launch kernel
+    size_t globalWorkSize[1] = { static_cast<size_t>(sampleCount) };
+    size_t localWorkSize[1] = { 64 };
+    if (globalWorkSize[0] < localWorkSize[0]) {
+        localWorkSize[0] = globalWorkSize[0];
+    }
+
+    err = clEnqueueNDRangeKernel(queue, kernel, 1, nullptr, globalWorkSize, localWorkSize, 0, nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+        clReleaseMemObject(paramBuffer);
+        clReleaseMemObject(outputBuffer);
+        clReleaseMemObject(inputBuffer);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
+
+    clFinish(queue);
+
+    // Read results
+    std::vector<float> output(outputSize);
+    err = clEnqueueReadBuffer(queue, outputBuffer, CL_TRUE, 0, outputSize * sizeof(float), output.data(), 0, nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+        clReleaseMemObject(paramBuffer);
+        clReleaseMemObject(outputBuffer);
+        clReleaseMemObject(inputBuffer);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
+
+    // Fill output vectors
+    redSamples.clear();
+    greenSamples.clear();
+    blueSamples.clear();
+    redSamples.reserve(sampleCount);
+    greenSamples.reserve(sampleCount);
+    blueSamples.reserve(sampleCount);
+    for (int i = 0; i < sampleCount; ++i) {
+        redSamples.push_back(output[i * 3 + 0]);
+        greenSamples.push_back(output[i * 3 + 1]);
+        blueSamples.push_back(output[i * 3 + 2]);
+    }
+
+    // Cleanup
+    clReleaseMemObject(paramBuffer);
+    clReleaseMemObject(outputBuffer);
+    clReleaseMemObject(inputBuffer);
+    clReleaseKernel(kernel);
+    clReleaseProgram(program);
     clReleaseCommandQueue(queue);
     clReleaseContext(context);
-    
-    return false; // Requires kernel file loading implementation
+
+    return true;
 }
 #else
 bool GPURenderer::sampleOpenCL(
