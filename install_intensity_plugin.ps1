@@ -24,6 +24,18 @@ $InstallBaseDir = "C:\Program Files\Common Files\OFX\Plugins"
 $InstallDir = Join-Path $InstallBaseDir "$PluginName.ofx.bundle"
 $Win64Dir = Join-Path $InstallDir "Contents\Win64"
 $ResourcesDir = Join-Path $InstallDir "Contents\Resources"
+$SourceCodeFile = "ofx\src\IntensityProfilePlotterPlugin.cpp"
+
+# Extract version from source code
+$VersionString = "2.0.0.14 (unknown build date)"
+if (Test-Path $SourceCodeFile) {
+    $VersionLine = Select-String -Path $SourceCodeFile -Pattern "buildVersion.*=" | Select-Object -First 1
+    if ($VersionLine) {
+        Write-Host "Source version line: $($VersionLine.Line.Trim())" -ForegroundColor Gray
+        $VersionString = "2.0.0.14 (built from source)"
+    }
+}
+Write-Host "Expected plugin version: $VersionString" -ForegroundColor Cyan
 
 # Optional: set to $true to force a rebuild before install
 $Rebuild = $true
