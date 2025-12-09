@@ -12,7 +12,12 @@ else()
 endif()
 
 # Suppress warnings-as-errors for external dependencies
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=unused-but-set-variable")
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=unused-but-set-variable")
+elseif(MSVC)
+    # MSVC: disable specific warnings or use /WX- to turn off warnings-as-errors
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4101")
+endif()
 
 # Build options for each plugin
 option(BUILD_OFX_PLUGIN "Build the Intensity Profile Plotter OFX plugin" ON)
@@ -21,10 +26,13 @@ option(BUILD_OFX_PLUGIN "Build the Intensity Profile Plotter OFX plugin" ON)
 # option(BUILD_VST3_ANALOG_SATURATION "Build the Analog Saturation VST3 plugin (JUCE-based)" ON)
 
 # OFX SDK path (can be set from command line: -DOFX_SDK_PATH=/path/to/ofx-sdk)
-# Commented out - let ofx/CMakeLists.txt handle the default
-# set(OFX_SDK_PATH "C:/Users/aberg/openfx" CACHE PATH "Path to OpenFX SDK")
-set(OFX_SDK_PATH "/Users/johan/openfx" CACHE PATH "Path to OpenFX SDK")
-
+if(WIN32)
+    set(OFX_SDK_PATH "C:/Users/aberg/Documents/openfx" CACHE PATH "Path to OpenFX SDK")
+elseif(APPLE)
+    set(OFX_SDK_PATH "/Users/johan/openfx" CACHE PATH "Path to OpenFX SDK")
+else()
+    set(OFX_SDK_PATH "/home/user/openfx" CACHE PATH "Path to OpenFX SDK")
+endif()
 
 # OFX Plugin
 if(BUILD_OFX_PLUGIN)
