@@ -122,30 +122,29 @@ void IntensityProfilePlotterInteract::drawPoint(const OFX::DrawArgs& args, doubl
     // Draw using OpenGL immediate mode (deprecated but widely supported in OFX)
     glPushAttrib(GL_ALL_ATTRIB_BITS);
     glDisable(GL_TEXTURE_2D);
-    
-    // Set color based on selection state
-    if (selected) {
-        glColor3f(1.0f, 1.0f, 0.0f); // Yellow when selected
-    } else {
-        glColor3f(1.0f, 1.0f, 1.0f); // White normally
-    }
-    
-    // Draw shadow halo for visibility
-    glColor4f(0.0f, 0.0f, 0.0f, 0.7f);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glLineWidth(5.0f);
-    glBegin(GL_LINE_LOOP);
+    
     const int segments = 20;
-    for (int i = 0; i < segments; ++i) {
+    
+    // Draw black shadow halo for visibility
+    glColor4f(0.0f, 0.0f, 0.0f, 0.8f);
+    glBegin(GL_TRIANGLE_FAN);
+    glVertex2d(x, y);
+    for (int i = 0; i <= segments; ++i) {
         double angle = 2.0 * M_PI * i / segments;
-        double dx = POINT_DISPLAY_RADIUS * cos(angle);
-        double dy = POINT_DISPLAY_RADIUS * sin(angle);
+        double dx = (POINT_DISPLAY_RADIUS + 3.0) * cos(angle);
+        double dy = (POINT_DISPLAY_RADIUS + 3.0) * sin(angle);
         glVertex2d(x + dx, y + dy);
     }
     glEnd();
     
-    // Draw filled circle
+    // Draw filled circle with bright color
+    if (selected) {
+        glColor3f(1.0f, 0.5f, 0.0f); // Bright orange when selected
+    } else {
+        glColor3f(0.0f, 1.0f, 1.0f); // Cyan normally
+    }
     glBegin(GL_TRIANGLE_FAN);
     glVertex2d(x, y);
     for (int i = 0; i <= segments; ++i) {
@@ -156,14 +155,26 @@ void IntensityProfilePlotterInteract::drawPoint(const OFX::DrawArgs& args, doubl
     }
     glEnd();
     
-    // Draw outline
-    glColor3f(0.0f, 0.0f, 0.0f);
+    // Draw white outline for contrast
+    glColor3f(1.0f, 1.0f, 1.0f);
     glLineWidth(2.0f);
     glBegin(GL_LINE_LOOP);
     for (int i = 0; i < segments; ++i) {
         double angle = 2.0 * M_PI * i / segments;
         double dx = POINT_DISPLAY_RADIUS * cos(angle);
         double dy = POINT_DISPLAY_RADIUS * sin(angle);
+        glVertex2d(x + dx, y + dy);
+    }
+    glEnd();
+    
+    // Draw inner black outline for extra definition
+    glColor3f(0.0f, 0.0f, 0.0f);
+    glLineWidth(1.0f);
+    glBegin(GL_LINE_LOOP);
+    for (int i = 0; i < segments; ++i) {
+        double angle = 2.0 * M_PI * i / segments;
+        double dx = (POINT_DISPLAY_RADIUS - 1.0) * cos(angle);
+        double dy = (POINT_DISPLAY_RADIUS - 1.0) * sin(angle);
         glVertex2d(x + dx, y + dy);
     }
     glEnd();
@@ -178,17 +189,25 @@ void IntensityProfilePlotterInteract::drawLine(const OFX::DrawArgs& args, double
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
-    // Draw shadow outline
-    glColor4f(0.0f, 0.0f, 0.0f, 0.7f);
-    glLineWidth(6.0f);
+    // Draw black shadow outline for visibility
+    glColor4f(0.0f, 0.0f, 0.0f, 0.8f);
+    glLineWidth(7.0f);
     glBegin(GL_LINES);
     glVertex2d(x1, y1);
     glVertex2d(x2, y2);
     glEnd();
     
-    // Draw main line
+    // Draw main line in cyan
+    glColor3f(0.0f, 1.0f, 1.0f);
+    glLineWidth(3.0f);
+    glBegin(GL_LINES);
+    glVertex2d(x1, y1);
+    glVertex2d(x2, y2);
+    glEnd();
+    
+    // Draw white center line for extra pop
     glColor3f(1.0f, 1.0f, 1.0f);
-    glLineWidth(2.0f);
+    glLineWidth(1.0f);
     glBegin(GL_LINES);
     glVertex2d(x1, y1);
     glVertex2d(x2, y2);
@@ -234,26 +253,53 @@ void IntensityProfilePlotterInteract::drawHandle(const OFX::DrawArgs& args, doub
 {
     glPushAttrib(GL_ALL_ATTRIB_BITS);
     glDisable(GL_TEXTURE_2D);
-    if (selected) {
-        glColor3f(1.0f, 1.0f, 0.0f);
-    } else {
-        glColor3f(1.0f, 1.0f, 1.0f);
-    }
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
     double half = HANDLE_SIZE * 0.5;
+    
+    // Draw black shadow
+    glColor4f(0.0f, 0.0f, 0.0f, 0.8f);
+    glBegin(GL_QUADS);
+    glVertex2d(x - half - 2, y - half - 2);
+    glVertex2d(x + half + 2, y - half - 2);
+    glVertex2d(x + half + 2, y + half + 2);
+    glVertex2d(x - half - 2, y + half + 2);
+    glEnd();
+    
+    // Draw filled square with bright color
+    if (selected) {
+        glColor3f(1.0f, 0.5f, 0.0f); // Bright orange when selected
+    } else {
+        glColor3f(1.0f, 0.0f, 1.0f); // Magenta normally
+    }
     glBegin(GL_QUADS);
     glVertex2d(x - half, y - half);
     glVertex2d(x + half, y - half);
     glVertex2d(x + half, y + half);
     glVertex2d(x - half, y + half);
     glEnd();
-    glColor3f(0.0f, 0.0f, 0.0f);
-    glLineWidth(1.5f);
+    
+    // Draw white outline
+    glColor3f(1.0f, 1.0f, 1.0f);
+    glLineWidth(2.0f);
     glBegin(GL_LINE_LOOP);
     glVertex2d(x - half, y - half);
     glVertex2d(x + half, y - half);
     glVertex2d(x + half, y + half);
     glVertex2d(x - half, y + half);
     glEnd();
+    
+    // Draw inner black outline
+    glColor3f(0.0f, 0.0f, 0.0f);
+    glLineWidth(1.0f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2d(x - half + 1, y - half + 1);
+    glVertex2d(x + half - 1, y - half + 1);
+    glVertex2d(x + half - 1, y + half - 1);
+    glVertex2d(x - half + 1, y + half - 1);
+    glEnd();
+    
     glPopAttrib();
 }
 
