@@ -79,7 +79,7 @@ $InfoPlist = @"
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleVersion</key>
-    <string>2.0.0.15</string>
+    <string>2.0.0.16</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>English</string>
 </dict>

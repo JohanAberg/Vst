@@ -35,6 +35,8 @@ IntensityProfilePlotterInteract::IntensityProfilePlotterInteract(OfxInteractHand
     , _lastMouseY(0.0)
     , _rectDragStartX(0.0)
     , _rectDragStartY(0.0)
+    , _lineP1Start{0.0, 0.0}
+    , _lineP2Start{0.0, 0.0}
 {
     // Get the effect instance from the parameter
     if (effect) {
@@ -457,6 +459,19 @@ bool IntensityProfilePlotterInteract::penDown(const OFX::PenArgs& args)
             _dragState = kDragPoint2;
             return true;
         }
+        
+        // Hit test line (for dragging both points together)
+        double t = 0.0;
+        if (hitTestLine(args.penPosition.x, args.penPosition.y, px1, py1, px2, py2, pixelScale, t)) {
+            _dragState = kDragLine;
+            _lastMouseX = args.penPosition.x;
+            _lastMouseY = args.penPosition.y;
+            _lineP1Start[0] = point1[0];
+            _lineP1Start[1] = point1[1];
+            _lineP2Start[0] = point2[0];
+            _lineP2Start[1] = point2[1];
+            return true;
+        }
     } catch (...) {}
     
     _dragState = kDragNone;
@@ -495,6 +510,22 @@ bool IntensityProfilePlotterInteract::penMotion(const OFX::PenArgs& args)
         } else if (_dragState == kDragPoint2) {
             OFX::Double2DParam* p = _instance->fetchDouble2DParam("point2");
             if (p) p->setValue(nx, ny);
+            return true;
+        } else if (_dragState == kDragLine) {
+            // Calculate delta from drag start in normalized coords
+            double dx = (args.penPosition.x - _lastMouseX) / width;
+            double dy = (args.penPosition.y - _lastMouseY) / height;
+            
+            // Apply delta to both points
+            double newP1X = std::max(0.0, std::min(1.0, _lineP1Start[0] + dx));
+            double newP1Y = std::max(0.0, std::min(1.0, _lineP1Start[1] + dy));
+            double newP2X = std::max(0.0, std::min(1.0, _lineP2Start[0] + dx));
+            double newP2Y = std::max(0.0, std::min(1.0, _lineP2Start[1] + dy));
+            
+            OFX::Double2DParam* p1 = _instance->fetchDouble2DParam("point1");
+            OFX::Double2DParam* p2 = _instance->fetchDouble2DParam("point2");
+            if (p1) p1->setValue(newP1X, newP1Y);
+            if (p2) p2->setValue(newP2X, newP2Y);
             return true;
         }
     } catch (...) {}
