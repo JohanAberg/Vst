@@ -167,7 +167,7 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     // Version info (read-only string)
     OFX::StringParamDescriptor* versionParam = desc.defineStringParam("_version");
     versionParam->setLabel("Version");
-    versionParam->setDefault("2.0.0.14 (" __DATE__ " " __TIME__ ")");
+    versionParam->setDefault("2.0.0.15 (" __DATE__ " " __TIME__ ")");
     versionParam->setEvaluateOnChange(false);
     versionParam->setAnimates(false);
     
@@ -261,7 +261,7 @@ void IntensityProfilePlotterPlugin::setupParameters()
 
         _versionParam = fetchStringParam("_version");
         if (_versionParam) {
-            const std::string buildVersion = std::string("2.0.0.14 ") + __DATE__ + " " + __TIME__;
+            const std::string buildVersion = std::string("2.0.0.15 ") + __DATE__ + " " + __TIME__;
             _versionParam->setValue(buildVersion);
         }
     } catch (...) {}
