@@ -4,6 +4,7 @@
 #include "ofxImageEffect.h"
 #include "ofxsImageEffect.h"
 #include <vector>
+#include <memory>
 
 /**
  * Samples intensity values along a scan line from an OFX image.
@@ -52,7 +53,7 @@ private:
         std::vector<float>& greenSamples,
         std::vector<float>& blueSamples
     );
-    
+
     bool sampleGPU(
         OFX::Image* image,
         const double point1[2],
@@ -64,8 +65,10 @@ private:
         std::vector<float>& greenSamples,
         std::vector<float>& blueSamples
     );
-    
+
     bool _gpuAvailable;
+    std::unique_ptr<class GPURenderer> _gpuRenderer;  // Cached GPU renderer
+    std::unique_ptr<class CPURenderer> _cpuRenderer;  // Cached CPU renderer
 };
 
 #endif // INTENSITY_SAMPLER_H

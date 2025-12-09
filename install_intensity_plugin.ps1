@@ -92,6 +92,6 @@ Write-Host "=== Installation Complete ===" -ForegroundColor Green
 Write-Host "Installed to: $InstallDir" -ForegroundColor Cyan
 Write-Host "Tip: If Resolve still shows the old version, delete OFXPluginCacheV2.xml and restart Resolve." -ForegroundColor Yellow
 
-Write-Host " ---remove ofx plugin cache for DaVinci Resolve ---" -ForegroundColor Red
+Write-Host " ---remove ofx plugin cache for DaVinci Resolve ---" -ForegroundColor Cyan
 # Clear OFX plugin cache for DaVinci Resolve
 Remove-Item "$env:APPDATA\Blackmagic Design\DaVinci Resolve\Support\OFXPluginCacheV2.xml" -Force -ErrorAction SilentlyContinue

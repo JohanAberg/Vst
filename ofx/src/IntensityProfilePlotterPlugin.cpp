@@ -40,9 +40,9 @@ void IntensityProfilePlotterPluginFactory::describe(OFX::ImageEffectDescriptor& 
     // Supported pixel depths
     desc.addSupportedBitDepth(OFX::eBitDepthFloat);
     
-    // Set render thread safety
-    desc.setRenderThreadSafety(OFX::eRenderInstanceSafe);
-    desc.setHostFrameThreading(true);  // Enable host-managed multithreading
+    // Set render thread safety - plugin is fully thread-safe
+    desc.setRenderThreadSafety(OFX::eRenderFullySafe);
+    desc.setHostFrameThreading(true);  // Enable host-managed multithreading for better performance
     
 #ifdef __APPLE__
     desc.setSupportsMetalRender(true);
@@ -50,10 +50,9 @@ void IntensityProfilePlotterPluginFactory::describe(OFX::ImageEffectDescriptor& 
     
     // Standard flags
     desc.setSingleInstance(false);
-    desc.setHostFrameThreading(false);
     desc.setSupportsMultiResolution(true);
     desc.setSupportsTiles(true);
-    desc.setTemporalClipAccess(false);
+    desc.setTemporalClipAccess(false);  // No temporal dependencies - implies no sequential rendering needed
     desc.setRenderTwiceAlways(false);
     desc.setSupportsMultipleClipPARs(false);
 }
@@ -267,7 +266,6 @@ void IntensityProfilePlotterPlugin::setupParameters()
         _blueCurveColorParam = fetchRGBAParam("blueCurveColor");
         _showReferenceRampParam = fetchBooleanParam("showReferenceRamp");
         _enablePlotParam = fetchBooleanParam("enablePlot");
-        _enablePlotParam = fetchBooleanParam("enablePlot");
 
         _versionParam = fetchStringParam("_version");
         if (_versionParam) {
@@ -298,6 +296,101 @@ void IntensityProfilePlotterPlugin::getClipPreferences(OFX::ClipPreferencesSette
     // Output matches input - use default behavior
     // clipPreferences.setOutputFrameVarying(_srcClip->getFrameVarying());
     // clipPreferences.setOutputHasContinousSamples(_srcClip->hasContinuousSamples());
+}
+
+void IntensityProfilePlotterPlugin::getRegionsOfInterest(const OFX::RegionsOfInterestArguments& args,
+                                                          OFX::RegionOfInterestSetter& rois)
+{
+    // Optimization: Tell the host we only need a thin region around the scan line
+    // This can significantly reduce memory and processing for high-res images
+    try {
+        // Ensure clips are initialized
+        if (!_srcClip) setupClips();
+        if (!_srcClip || !_srcClip->isConnected()) {
+            return;  // No source clip, use default ROI
+        }
+        
+        if (!_point1Param) setupParameters();
+        if (!_point2Param) setupParameters();
+        
+        if (_point1Param && _point2Param) {
+            // Get scan line endpoints in normalized coordinates
+            OFX::Double2DParam* p1 = _point1Param;
+            OFX::Double2DParam* p2 = _point2Param;
+            
+            double x1, y1, x2, y2;
+            p1->getValueAtTime(args.time, x1, y1);
+            p2->getValueAtTime(args.time, x2, y2);
+            
+            // Convert to RoD space (typically pixel coordinates)
+            OfxRectD rod = _srcClip->getRegionOfDefinition(args.time);
+            double width = rod.x2 - rod.x1;
+            double height = rod.y2 - rod.y1;
+            
+            // Validate ROD dimensions
+            if (width <= 0 || height <= 0) {
+                return;  // Invalid ROD, use default
+            }
+            
+            double px1 = rod.x1 + x1 * width;
+            double py1 = rod.y1 + y1 * height;
+            double px2 = rod.x1 + x2 * width;
+            double py2 = rod.y1 + y2 * height;
+            
+            // Create bounding box around scan line with small margin
+            double margin = 2.0;  // pixels
+            OfxRectD roi;
+            roi.x1 = std::min(px1, px2) - margin;
+            roi.y1 = std::min(py1, py2) - margin;
+            roi.x2 = std::max(px1, px2) + margin;
+            roi.y2 = std::max(py1, py2) + margin;
+            
+            // Clamp to RoD
+            roi.x1 = std::max(rod.x1, roi.x1);
+            roi.y1 = std::max(rod.y1, roi.y1);
+            roi.x2 = std::min(rod.x2, roi.x2);
+            roi.y2 = std::min(rod.y2, roi.y2);
+            
+            // Set RoI for source clip
+            rois.setRegionOfInterest(*_srcClip, roi);
+        }
+    } catch (...) {
+        // If ROI optimization fails, fall back to default (full frame)
+    }
+}
+
+void IntensityProfilePlotterPlugin::purgeCaches()
+{
+    // Free GPU resources and cached samples when host requests memory cleanup
+    std::lock_guard<std::mutex> lock(_sampleMutex);
+    _redSamples.clear();
+    _redSamples.shrink_to_fit();
+    _greenSamples.clear();
+    _greenSamples.shrink_to_fit();
+    _blueSamples.clear();
+    _blueSamples.shrink_to_fit();
+    
+    // Recreate sampler to free GPU resources
+    _sampler.reset();
+}
+
+void IntensityProfilePlotterPlugin::beginSequenceRender(const OFX::BeginSequenceRenderArguments& args)
+{
+    // Pre-allocate resources for sequence rendering
+    // Initialize sampler once for the sequence
+    if (!_sampler) {
+        try {
+            _sampler = std::make_unique<IntensitySampler>();
+        } catch (...) {
+            _sampler = nullptr;
+        }
+    }
+}
+
+void IntensityProfilePlotterPlugin::endSequenceRender(const OFX::EndSequenceRenderArguments& args)
+{
+    // Optionally free resources after sequence render completes
+    // For now, keep sampler alive for interactive session
 }
 
 bool IntensityProfilePlotterPlugin::isIdentity(const OFX::IsIdentityArguments& args, 
@@ -358,21 +451,37 @@ void IntensityProfilePlotterPlugin::render(const OFX::RenderArguments& args)
         void* dstPtr = dstImg->getPixelData();
         
         if (srcPtr && dstPtr) {
-            // Determine number of bytes per pixel (assuming float RGBA = 16 bytes)
-            int bytesPerPixel = 16;
+            // Determine bytes per pixel based on pixel depth and components
+            OFX::BitDepthEnum bitDepth = srcImg->getPixelDepth();
+            OFX::PixelComponentEnum components = srcImg->getPixelComponents();
+            
+            int bytesPerComponent;
+            switch (bitDepth) {
+                case OFX::eBitDepthUByte:  bytesPerComponent = 1; break;
+                case OFX::eBitDepthUShort: bytesPerComponent = 2; break;
+                case OFX::eBitDepthHalf:   bytesPerComponent = 2; break;
+                case OFX::eBitDepthFloat:  bytesPerComponent = 4; break;
+                default: bytesPerComponent = 4; break;
+            }
+            
+            int componentCount = (components == OFX::ePixelComponentRGBA) ? 4 : 3;
+            int bytesPerPixel = bytesPerComponent * componentCount;
+            
             int width = renderWindow.x2 - renderWindow.x1;
             int height = renderWindow.y2 - renderWindow.y1;
+            int rowBytes = width * bytesPerPixel;
             
             // Copy only the renderWindow region
             // Calculate the offset into the full image buffers
             int xOffset = renderWindow.x1 - srcBounds.x1;
             int yOffset = renderWindow.y1 - srcBounds.y1;
             
+            // Optimized: copy row by row using memcpy
             for (int y = 0; y < height; ++y) {
                 int fullY = yOffset + y;
                 char* srcRow = (char*)srcPtr + fullY * srcRowBytes + xOffset * bytesPerPixel;
                 char* dstRow = (char*)dstPtr + fullY * dstRowBytes + xOffset * bytesPerPixel;
-                std::memcpy(dstRow, srcRow, width * bytesPerPixel);
+                std::memcpy(dstRow, srcRow, rowBytes);
             }
         }
         // Images automatically released when unique_ptr goes out of scope

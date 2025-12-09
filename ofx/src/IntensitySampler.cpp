@@ -8,13 +8,31 @@
 
 IntensitySampler::IntensitySampler()
     : _gpuAvailable(false)
+    , _gpuRenderer(nullptr)
+    , _cpuRenderer(nullptr)
 {
-    // Check GPU availability
+    // Check GPU availability and pre-create renderer
     _gpuAvailable = GPURenderer::isAvailable();
+    if (_gpuAvailable) {
+        try {
+            _gpuRenderer = std::make_unique<GPURenderer>();
+        } catch (...) {
+            _gpuAvailable = false;
+            _gpuRenderer = nullptr;
+        }
+    }
+    
+    // Always have CPU fallback ready
+    try {
+        _cpuRenderer = std::make_unique<CPURenderer>();
+    } catch (...) {
+        _cpuRenderer = nullptr;
+    }
 }
 
 IntensitySampler::~IntensitySampler()
 {
+    // Unique_ptr handles cleanup automatically
 }
 
 void IntensitySampler::sampleIntensity(
@@ -58,10 +76,12 @@ bool IntensitySampler::sampleGPU(
     std::vector<float>& greenSamples,
     std::vector<float>& blueSamples)
 {
-    // Delegate to GPURenderer
-    GPURenderer renderer;
-    return renderer.sampleIntensity(image, point1, point2, sampleCount, imageWidth, imageHeight,
-                                    redSamples, greenSamples, blueSamples);
+    // Use cached GPU renderer for better performance
+    if (_gpuRenderer) {
+        return _gpuRenderer->sampleIntensity(image, point1, point2, sampleCount, imageWidth, imageHeight,
+                                            redSamples, greenSamples, blueSamples);
+    }
+    return false;
 }
 
 void IntensitySampler::sampleCPU(
@@ -75,8 +95,9 @@ void IntensitySampler::sampleCPU(
     std::vector<float>& greenSamples,
     std::vector<float>& blueSamples)
 {
-    // Delegate to CPURenderer
-    CPURenderer renderer;
-    renderer.sampleIntensity(image, point1, point2, sampleCount, imageWidth, imageHeight,
-                             redSamples, greenSamples, blueSamples);
+    // Use cached CPU renderer for better performance
+    if (_cpuRenderer) {
+        _cpuRenderer->sampleIntensity(image, point1, point2, sampleCount, imageWidth, imageHeight,
+                                     redSamples, greenSamples, blueSamples);
+    }
 }

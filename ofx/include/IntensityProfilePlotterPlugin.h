@@ -33,6 +33,11 @@ public:
     virtual void getClipPreferences(OFX::ClipPreferencesSetter& clipPreferences) override;
     virtual bool isIdentity(const OFX::IsIdentityArguments& args, 
                            OFX::Clip*& identityClip, double& identityTime) override;
+    virtual void getRegionsOfInterest(const OFX::RegionsOfInterestArguments& args,
+                                     OFX::RegionOfInterestSetter& rois) override;
+    virtual void purgeCaches() override;
+    virtual void beginSequenceRender(const OFX::BeginSequenceRenderArguments& args) override;
+    virtual void endSequenceRender(const OFX::EndSequenceRenderArguments& args) override;
 
     // Parameter accessors
     OFX::Double2DParam* getPoint1Param() const { return _point1Param; }
