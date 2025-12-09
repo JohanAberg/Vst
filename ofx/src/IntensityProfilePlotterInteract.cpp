@@ -316,7 +316,7 @@ void IntensityProfilePlotterInteract::drawPlot(const OFX::DrawArgs& args, OFX::I
             const double t = (sampleCount == 1) ? 0.0 : static_cast<double>(i) / (sampleCount - 1);
             const double x = rectX + t * rectW;
             const double v = std::min(whitePoint, std::max(0.0, static_cast<double>(c[i])));
-            const double y = rectY + (1.0 - (v / whitePoint)) * rectH;
+            const double y = rectY + (v / whitePoint) * rectH;
             glVertex2d(x, y);
         }
         glEnd();
