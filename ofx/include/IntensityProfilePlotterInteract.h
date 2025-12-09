@@ -45,6 +45,8 @@ private:
     IntensityProfilePlotterPlugin* _instance;
     double _lineDragOffset;
     double _lastMouseX, _lastMouseY; // Track last mouse position for delta calculation
+    double _lineP1Start[2]; // Store point1 position when line drag starts
+    double _lineP2Start[2]; // Store point2 position when line drag starts
     double _rectStartPos[2];
     double _rectStartSize[2];
     double _rectDragStartX, _rectDragStartY;
