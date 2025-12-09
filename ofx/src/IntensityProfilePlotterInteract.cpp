@@ -130,10 +130,24 @@ void IntensityProfilePlotterInteract::drawPoint(const OFX::DrawArgs& args, doubl
         glColor3f(1.0f, 1.0f, 1.0f); // White normally
     }
     
+    // Draw shadow halo for visibility
+    glColor4f(0.0f, 0.0f, 0.0f, 0.7f);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glLineWidth(5.0f);
+    glBegin(GL_LINE_LOOP);
+    const int segments = 20;
+    for (int i = 0; i < segments; ++i) {
+        double angle = 2.0 * M_PI * i / segments;
+        double dx = POINT_DISPLAY_RADIUS * cos(angle);
+        double dy = POINT_DISPLAY_RADIUS * sin(angle);
+        glVertex2d(x + dx, y + dy);
+    }
+    glEnd();
+    
     // Draw filled circle
     glBegin(GL_TRIANGLE_FAN);
     glVertex2d(x, y);
-    const int segments = 20;
     for (int i = 0; i <= segments; ++i) {
         double angle = 2.0 * M_PI * i / segments;
         double dx = POINT_DISPLAY_RADIUS * cos(angle);
@@ -161,9 +175,20 @@ void IntensityProfilePlotterInteract::drawLine(const OFX::DrawArgs& args, double
 {
     glPushAttrib(GL_ALL_ATTRIB_BITS);
     glDisable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
+    // Draw shadow outline
+    glColor4f(0.0f, 0.0f, 0.0f, 0.7f);
+    glLineWidth(6.0f);
+    glBegin(GL_LINES);
+    glVertex2d(x1, y1);
+    glVertex2d(x2, y2);
+    glEnd();
+    
+    // Draw main line
     glColor3f(1.0f, 1.0f, 1.0f);
     glLineWidth(2.0f);
-    
     glBegin(GL_LINES);
     glVertex2d(x1, y1);
     glVertex2d(x2, y2);
@@ -291,9 +316,11 @@ void IntensityProfilePlotterInteract::drawPlot(const OFX::DrawArgs& args, OFX::I
     double rectPos[2] = {0.05, 0.05};
     double rectSize[2] = {0.3, 0.2};
     OFX::Double2DParam* rectPosParam = _instance->getPlotRectPosParam();
+    if (!rectPosParam) rectPosParam = _instance->fetchDouble2DParam("plotRectPos");
     OFX::Double2DParam* rectSizeParam = _instance->getPlotRectSizeParam();
-    if (rectPosParam) rectPosParam->getValue(rectPos[0], rectPos[1]);
-    if (rectSizeParam) rectSizeParam->getValue(rectSize[0], rectSize[1]);
+    if (!rectSizeParam) rectSizeParam = _instance->fetchDouble2DParam("plotRectSize");
+    if (rectPosParam) rectPosParam->getValueAtTime(args.time, rectPos[0], rectPos[1]);
+    if (rectSizeParam) rectSizeParam->getValueAtTime(args.time, rectSize[0], rectSize[1]);
 
     const double rectX = rectPos[0] * imgW;
     const double rectY = rectPos[1] * imgH;
@@ -341,6 +368,32 @@ void IntensityProfilePlotterInteract::drawPlot(const OFX::DrawArgs& args, OFX::I
     glVertex2d(rectX + rectW, rectY + rectH);
     glVertex2d(rectX, rectY + rectH);
     glEnd();
+
+    // Draw dashed reference line at whitepoint = 1.0
+    if (whitePoint > 0.0) {
+        const double refY = rectY + (1.0 / whitePoint) * rectH;
+        if (refY >= rectY && refY <= rectY + rectH) {
+            glEnable(GL_LINE_STIPPLE);
+            glLineStipple(2, 0xAAAA); // Dashed pattern
+            glColor3f(0.6f, 0.6f, 0.6f);
+            glLineWidth(1.5f);
+            glBegin(GL_LINES);
+            glVertex2d(rectX, refY);
+            glVertex2d(rectX + rectW, refY);
+            glEnd();
+            glDisable(GL_LINE_STIPPLE);
+            
+            // Draw \"1\" marker next to the line
+            glColor3f(0.8f, 0.8f, 0.8f);
+            glBegin(GL_LINES);
+            // Draw a small \"1\" shape
+            glVertex2d(rectX + rectW + 8, refY - 8);
+            glVertex2d(rectX + rectW + 8, refY + 8);
+            glVertex2d(rectX + rectW + 6, refY - 6);
+            glVertex2d(rectX + rectW + 8, refY - 8);
+            glEnd();
+        }
+    }
 
     glLineWidth(static_cast<float>(lineWidth));
     
@@ -408,10 +461,29 @@ bool IntensityProfilePlotterInteract::draw(const OFX::DrawArgs& args)
         drawPoint(args, px1, py1, _dragState == kDragPoint1);
         drawPoint(args, px2, py2, _dragState == kDragPoint2);
 
+        // Get plot rect parameters
+        double rectPos[2] = {0.05, 0.05};
+        double rectSize[2] = {0.3, 0.2};
+        OFX::Double2DParam* rectPosParam = _instance->fetchDouble2DParam("plotRectPos");
+        if (rectPosParam) rectPosParam->getValueAtTime(args.time, rectPos[0], rectPos[1]);
+        OFX::Double2DParam* rectSizeParam = _instance->fetchDouble2DParam("plotRectSize");
+        if (rectSizeParam) rectSizeParam->getValueAtTime(args.time, rectSize[0], rectSize[1]);
+        
+        double rx = rectPos[0] * width;
+        double ry = rectPos[1] * height;
+        double rw = rectSize[0] * width;
+        double rh = rectSize[1] * height;
+        
         // Draw plot of sampled RGB values along the line
         if (src) {
             drawPlot(args, *src, imgW, imgH, point1[0], point1[1], point2[0], point2[1]);
         }
+        
+        // Always draw resize handles on plot rect corners
+        drawHandle(args, rx, ry, _dragState == kDragRectTL);
+        drawHandle(args, rx + rw, ry, _dragState == kDragRectTR);
+        drawHandle(args, rx, ry + rh, _dragState == kDragRectBL);
+        drawHandle(args, rx + rw, ry + rh, _dragState == kDragRectBR);
     } catch (...) {}
     
     return true;
@@ -472,6 +544,42 @@ bool IntensityProfilePlotterInteract::penDown(const OFX::PenArgs& args)
             _lineP2Start[1] = point2[1];
             return true;
         }
+        
+        // Hit test plot rectangle
+        double rectPos[2] = {0.05, 0.05};
+        double rectSize[2] = {0.3, 0.2};
+        OFX::Double2DParam* rectPosParam = _instance->fetchDouble2DParam("plotRectPos");
+        if (rectPosParam) rectPosParam->getValueAtTime(args.time, rectPos[0], rectPos[1]);
+        OFX::Double2DParam* rectSizeParam = _instance->fetchDouble2DParam("plotRectSize");
+        if (rectSizeParam) rectSizeParam->getValueAtTime(args.time, rectSize[0], rectSize[1]);
+        
+        double rx = rectPos[0] * width;
+        double ry = rectPos[1] * height;
+        double rw = rectSize[0] * width;
+        double rh = rectSize[1] * height;
+        
+        // Hit test rect handles first (higher priority)
+        int handleHit = hitTestRectHandles(args.penPosition.x, args.penPosition.y, rx, ry, rw, rh, pixelScale);
+        if (handleHit >= 0) {
+            _dragState = static_cast<DragState>(handleHit);
+            _lastMouseX = args.penPosition.x;
+            _lastMouseY = args.penPosition.y;
+            _rectStartPos[0] = rectPos[0];
+            _rectStartPos[1] = rectPos[1];
+            _rectStartSize[0] = rectSize[0];
+            _rectStartSize[1] = rectSize[1];
+            return true;
+        }
+        
+        // Hit test rect body (for moving)
+        if (hitTestRectBody(args.penPosition.x, args.penPosition.y, rx, ry, rw, rh)) {
+            _dragState = kDragRectMove;
+            _lastMouseX = args.penPosition.x;
+            _lastMouseY = args.penPosition.y;
+            _rectStartPos[0] = rectPos[0];
+            _rectStartPos[1] = rectPos[1];
+            return true;
+        }
     } catch (...) {}
     
     _dragState = kDragNone;
@@ -526,6 +634,49 @@ bool IntensityProfilePlotterInteract::penMotion(const OFX::PenArgs& args)
             OFX::Double2DParam* p2 = _instance->fetchDouble2DParam("point2");
             if (p1) p1->setValue(newP1X, newP1Y);
             if (p2) p2->setValue(newP2X, newP2Y);
+            return true;
+        } else if (_dragState == kDragRectMove) {
+            // Move rect
+            double dx = (args.penPosition.x - _lastMouseX) / width;
+            double dy = (args.penPosition.y - _lastMouseY) / height;
+            double newX = std::max(0.0, std::min(1.0 - _rectStartSize[0], _rectStartPos[0] + dx));
+            double newY = std::max(0.0, std::min(1.0 - _rectStartSize[1], _rectStartPos[1] + dy));
+            
+            OFX::Double2DParam* rectPosParam = _instance->fetchDouble2DParam("plotRectPos");
+            if (rectPosParam) rectPosParam->setValue(newX, newY);
+            return true;
+        } else if (_dragState >= kDragRectTL && _dragState <= kDragRectBR) {
+            // Resize rect by dragging corner handles
+            double dx = (args.penPosition.x - _lastMouseX) / width;
+            double dy = (args.penPosition.y - _lastMouseY) / height;
+            
+            double newX = _rectStartPos[0];
+            double newY = _rectStartPos[1];
+            double newW = _rectStartSize[0];
+            double newH = _rectStartSize[1];
+            
+            if (_dragState == kDragRectTL) {
+                newX = std::max(0.0, std::min(_rectStartPos[0] + _rectStartSize[0] - 0.05, _rectStartPos[0] + dx));
+                newY = std::max(0.0, std::min(_rectStartPos[1] + _rectStartSize[1] - 0.05, _rectStartPos[1] + dy));
+                newW = _rectStartSize[0] - (newX - _rectStartPos[0]);
+                newH = _rectStartSize[1] - (newY - _rectStartPos[1]);
+            } else if (_dragState == kDragRectTR) {
+                newY = std::max(0.0, std::min(_rectStartPos[1] + _rectStartSize[1] - 0.05, _rectStartPos[1] + dy));
+                newW = std::max(0.05, std::min(1.0 - _rectStartPos[0], _rectStartSize[0] + dx));
+                newH = _rectStartSize[1] - (newY - _rectStartPos[1]);
+            } else if (_dragState == kDragRectBL) {
+                newX = std::max(0.0, std::min(_rectStartPos[0] + _rectStartSize[0] - 0.05, _rectStartPos[0] + dx));
+                newW = _rectStartSize[0] - (newX - _rectStartPos[0]);
+                newH = std::max(0.05, std::min(1.0 - _rectStartPos[1], _rectStartSize[1] + dy));
+            } else if (_dragState == kDragRectBR) {
+                newW = std::max(0.05, std::min(1.0 - _rectStartPos[0], _rectStartSize[0] + dx));
+                newH = std::max(0.05, std::min(1.0 - _rectStartPos[1], _rectStartSize[1] + dy));
+            }
+            
+            OFX::Double2DParam* rectPosParam = _instance->fetchDouble2DParam("plotRectPos");
+            OFX::Double2DParam* rectSizeParam = _instance->fetchDouble2DParam("plotRectSize");
+            if (rectPosParam) rectPosParam->setValue(newX, newY);
+            if (rectSizeParam) rectSizeParam->setValue(newW, newH);
             return true;
         }
     } catch (...) {}
