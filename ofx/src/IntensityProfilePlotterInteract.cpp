@@ -254,6 +254,22 @@ void IntensityProfilePlotterInteract::drawPlot(const OFX::DrawArgs& args, OFX::I
     if (whitePointParam) whitePointParam->getValue(whitePoint);
     if (whitePoint <= 0.0) whitePoint = 1.0;
 
+    int lineWidth = 2;
+    OFX::IntParam* lineWidthParam = _instance->getLineWidthParam();
+    if (lineWidthParam) lineWidthParam->getValue(lineWidth);
+    lineWidth = std::max(1, std::min(20, lineWidth));
+
+    // Fetch curve colors
+    double redColor[4] = {1.0, 0.2, 0.2, 1.0};
+    double greenColor[4] = {0.2, 1.0, 0.2, 1.0};
+    double blueColor[4] = {0.2, 0.4, 1.0, 1.0};
+    OFX::RGBAParam* redParam = _instance->getRedCurveColorParam();
+    OFX::RGBAParam* greenParam = _instance->getGreenCurveColorParam();
+    OFX::RGBAParam* blueParam = _instance->getBlueCurveColorParam();
+    if (redParam) redParam->getValue(redColor[0], redColor[1], redColor[2], redColor[3]);
+    if (greenParam) greenParam->getValue(greenColor[0], greenColor[1], greenColor[2], greenColor[3]);
+    if (blueParam) blueParam->getValue(blueColor[0], blueColor[1], blueColor[2], blueColor[3]);
+
     // Plot rect (normalized to image, map to pixels using image dims)
     double rectPos[2] = {0.05, 0.05};
     double rectSize[2] = {0.3, 0.2};
@@ -309,8 +325,9 @@ void IntensityProfilePlotterInteract::drawPlot(const OFX::DrawArgs& args, OFX::I
     glVertex2d(rectX, rectY + rectH);
     glEnd();
 
-    auto plotChannel = [&](const std::vector<float>& c, float rC, float gC, float bC) {
-        glColor3f(rC, gC, bC);
+    auto plotChannel = [&](const std::vector<float>& c, double rC, double gC, double bC) {
+        glColor3f(static_cast<float>(rC), static_cast<float>(gC), static_cast<float>(bC));
+        glLineWidth(static_cast<float>(lineWidth));
         glBegin(GL_LINE_STRIP);
         for (int i = 0; i < sampleCount; ++i) {
             const double t = (sampleCount == 1) ? 0.0 : static_cast<double>(i) / (sampleCount - 1);
@@ -322,9 +339,9 @@ void IntensityProfilePlotterInteract::drawPlot(const OFX::DrawArgs& args, OFX::I
         glEnd();
     };
 
-    plotChannel(r, 1.0f, 0.2f, 0.2f);
-    plotChannel(g, 0.2f, 1.0f, 0.2f);
-    plotChannel(b, 0.2f, 0.4f, 1.0f);
+    plotChannel(r, redColor[0], redColor[1], redColor[2]);
+    plotChannel(g, greenColor[0], greenColor[1], greenColor[2]);
+    plotChannel(b, blueColor[0], blueColor[1], blueColor[2]);
 
     glPopAttrib();
 }

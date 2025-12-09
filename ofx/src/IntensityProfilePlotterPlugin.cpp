@@ -109,14 +109,6 @@ void IntensityProfilePlotterPluginFactory::describeInContext(OFX::ImageEffectDes
     sampleCountParam->setDisplayRange(64, 2048);
     sampleCountParam->setHint("Number of samples along the scan line");
     sampleCountParam->setAnimates(false);
-    
-    // Plot height
-    OFX::DoubleParamDescriptor* plotHeightParam = desc.defineDoubleParam("plotHeight");
-    plotHeightParam->setLabel("Plot Height");
-    plotHeightParam->setDefault(0.3);
-    plotHeightParam->setDisplayRange(0.1, 0.8);
-    plotHeightParam->setHint("Height of the plot overlay (normalized)");
-    plotHeightParam->setAnimates(false);
 
     // Plot rectangle position (top-left) and size (normalized)
     OFX::Double2DParamDescriptor* plotRectPosParam = desc.defineDouble2DParam("plotRectPos");
@@ -258,7 +250,6 @@ void IntensityProfilePlotterPlugin::setupParameters()
         _point2Param = fetchDouble2DParam("point2");
         _dataSourceParam = fetchChoiceParam("dataSource");
         _sampleCountParam = fetchIntParam("sampleCount");
-        _plotHeightParam = fetchDoubleParam("plotHeight");
         _plotRectPosParam = fetchDouble2DParam("plotRectPos");
         _plotRectSizeParam = fetchDouble2DParam("plotRectSize");
         _whitePointParam = fetchDoubleParam("whitePoint");
