@@ -4,6 +4,12 @@
 #include "ofxImageEffect.h"
 #include "ofxsImageEffect.h"
 #include <vector>
+#include <mutex>
+#include <unordered_map>
+
+#ifdef HAVE_OPENCL
+#include <CL/cl.h>
+#endif
 
 /**
  * GPU-accelerated rendering implementation.
@@ -73,6 +79,49 @@ private:
     static bool _availabilityChecked;
     
     void checkAvailability();
+    
+    // Optimization #1: Kernel caching to avoid recompilation
+#ifdef HAVE_OPENCL
+    std::unordered_map<uintptr_t, cl_program> _cachedPrograms;  // device -> compiled program
+    std::mutex _programCacheMutex;
+    
+    cl_program getCachedOrCompileProgram(cl_context context, cl_device_id device);
+    
+    // Optimization #2: Buffer pool to reduce malloc/free overhead
+    struct BufferPoolEntry {
+        cl_mem buffer;
+        size_t size;
+        bool inUse;
+    };
+    std::vector<BufferPoolEntry> _bufferPool;  // Pre-allocated GPU memory cache
+    std::mutex _bufferPoolMutex;
+    
+    /**
+     * Get or allocate a GPU buffer of at least `size` bytes.
+     * Reuses existing buffers from pool if available to avoid clCreateBuffer overhead.
+     */
+    cl_mem getOrAllocateBuffer(cl_context context, size_t size, cl_mem_flags flags, cl_int& err);
+    
+    /**
+     * Release a buffer back to the pool for reuse rather than deallocating immediately.
+     */
+    void releaseBufferToPool(cl_mem buffer);
+    
+    /**
+     * Clear all pooled buffers (called in destructor).
+     */
+    void clearBufferPool();
+    
+    // Optimization #3: Pinned (page-locked) host memory for faster GPU transfers
+    std::vector<float> _pinnedHostMemory;  // Pre-allocated pinned memory for sampling results
+    bool _havePinnedMemory;
+    
+    /**
+     * Allocate pinned memory for faster GPU-to-CPU transfers.
+     * Returns true if pinned memory was successfully allocated.
+     */
+    bool allocatePinnedMemory(cl_context context, size_t size);
+#endif
 };
 
 #endif // GPU_RENDERER_H

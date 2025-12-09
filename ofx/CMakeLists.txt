@@ -247,3 +247,16 @@ if(HAVE_OPENCL)
         DESTINATION .
     )
 endif()
+
+# Benchmark executable (standalone, no OFX dependency)
+add_executable(benchmark_harness ${CMAKE_CURRENT_SOURCE_DIR}/benchmark_harness.cpp)
+set_target_properties(benchmark_harness PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(benchmark_harness PRIVATE -O2 -Wall -Wextra)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    target_compile_options(benchmark_harness PRIVATE /O2 /W4)
+endif()
