@@ -147,15 +147,70 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architectural documentation.
 
 ## License
 
-[Specify your license here]
+This project is licensed under the MIT License - see below for details:
+
+```
+MIT License
+
+Copyright (c) 2025 Johan Aberg
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Contributing
 
-[Contributing guidelines if applicable]
+Contributions are welcome! If you'd like to contribute to this project:
+
+1. **Fork the repository** on GitHub
+2. **Create a feature branch** (`git checkout -b feature/your-feature-name`)
+3. **Make your changes** and ensure they follow the existing code style
+4. **Test your changes** thoroughly on your target platform
+5. **Commit your changes** (`git commit -am 'Add some feature'`)
+6. **Push to the branch** (`git push origin feature/your-feature-name`)
+7. **Open a Pull Request** with a clear description of your changes
+
+### Guidelines
+- Follow C++17 standard practices
+- Maintain RAII memory management patterns
+- Include comments for complex logic
+- Test on macOS, Windows, or Linux as applicable
+- Ensure GPU acceleration paths remain functional
 
 ## Support
 
-[Support information]
+### Getting Help
+
+If you encounter issues or have questions:
+
+- **Issues**: Report bugs or request features via [GitHub Issues](https://github.com/JohanAberg/Vst/issues)
+- **Discussions**: Ask questions in [GitHub Discussions](https://github.com/JohanAberg/Vst/discussions)
+- **Email**: Contact Johan Aberg at johan@aberg.co.nz
+
+### Known Issues
+
+Please check the [Issues](https://github.com/JohanAberg/Vst/issues) page for known bugs and planned enhancements.
+
+### Platform Support
+
+- **macOS**: Fully supported with Metal GPU acceleration
+- **Windows**: Supported with OpenCL GPU acceleration
+- **Linux**: Supported with OpenCL GPU acceleration
 
 ## Version History
 
